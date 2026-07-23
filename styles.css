@@ -214,7 +214,7 @@ body {
 .mascot-play.think { animation: wobble .6s ease; }
 @keyframes pop { 0%{transform:scale(1)} 40%{transform:scale(1.25) rotate(6deg)} 100%{transform:scale(1)} }
 @keyframes wobble { 0%,100%{transform:rotate(0)} 25%{transform:rotate(-8deg)} 75%{transform:rotate(8deg)} }
-.problem-text { font-size: 22px; font-weight: 900; margin: 10px 0 14px; letter-spacing: .04em; }
+.problem-text { font-size: 30px; font-weight: 900; margin: 10px 0 14px; letter-spacing: .04em; }
 
 /* 計算系：式と答え欄を横1行に（左寄せ・小さめの数字） */
 .calc-row {
@@ -229,7 +229,7 @@ body {
 
 /* 通分（分数4つ）を1行に収めるための小さめ表示 */
 .calc-tight { gap: 3px 6px; }
-.calc-tight .problem-text { font-size: 18px; letter-spacing: 0; }
+.calc-tight .problem-text { font-size: 24px; letter-spacing: 0; }
 .calc-tight .cd-paren { font-size: 26px; }
 .calc-tight .cd-comma { font-size: 22px; }
 .calc-tight .tf-paren { font-size: 28px; }
@@ -290,24 +290,25 @@ body {
 @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-6px)} 60%{transform:translateX(6px)} }
 
 /* ---------- 作業エリア（左：キーパッド／右：手書きメモ） ---------- */
-.work-area { display: flex; gap: 12px; align-items: stretch; margin: 16px 0 6px; }
-.work-left, .work-right { flex: 1 1 50%; min-width: 0; }
-.work-right { display: flex; flex-direction: column; }
-
-/* ---------- キーパッド（正方形ボタン） ---------- */
-.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+/* ---------- キーパッド（1〜5／6〜0 の2行・横いっぱい） ---------- */
+.keypad-area { margin: 10px 0 12px; }
+.keypad-2row { display: flex; flex-direction: column; gap: 8px; }
+.key-row { display: flex; gap: 8px; }
+.key-row-ctrl { margin-top: 2px; }
 .key {
+  flex: 1 1 0; min-width: 0; height: 58px; padding: 0;
   background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
-  aspect-ratio: 1 / 1; padding: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 22px; font-weight: 900; cursor: pointer;
+  font-size: 26px; font-weight: 900; cursor: pointer;
   font-family: inherit; color: var(--ink);
   transition: background .1s, transform .06s;
 }
 .key:hover { background: #1b2250; }
 .key:active { transform: translateY(2px); background: rgba(139, 92, 246, .25); }
-.key.ghost { visibility: hidden; }
-.key.wide-key { color: var(--gold); }
+.key.wide-key { color: var(--gold); font-size: 20px; letter-spacing: .04em; }
+
+/* ---------- 手書きメモ（横幅いっぱい） ---------- */
+.memo-full { margin: 4px 0 6px; }
 
 /* ---------- 手書きメモパッド ---------- */
 .memo-head {
@@ -657,9 +658,9 @@ body {
 
   .problem-box { padding: 16px 12px; border-radius: 16px; }
   .mascot-play { width: 52px; height: 52px; }
-  .problem-text { font-size: 18px; }
+  .problem-text { font-size: 25px; }
   .calc-row { gap: 4px 8px; }
-  .calc-tight .problem-text { font-size: 15px; }
+  .calc-tight .problem-text { font-size: 20px; }
   .calc-tight .ans-twofrac .frac .fld { width: 34px; font-size: 14px; }
   .calc-tight .ans-twofrac .frac .frac-bar { width: 42px; }
   .calc-tight .cd-paren { font-size: 22px; }
@@ -673,10 +674,11 @@ body {
   .ans-twofrac .frac .fld { width: 40px; font-size: 17px; }
   .ans-twofrac .frac .frac-bar { width: 48px; }
 
-  .work-area { gap: 8px; }
-  .keypad { gap: 6px; }
-  .key { font-size: 19px; border-radius: 12px; }
-  .memo-canvas { min-height: 190px; }
+  .keypad-2row { gap: 6px; }
+  .key-row { gap: 6px; }
+  .key { height: 52px; font-size: 23px; border-radius: 12px; }
+  .key.wide-key { font-size: 18px; }
+  .memo-canvas { min-height: 200px; }
 
   .play-actions { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
   .primary-btn, .next-btn { width: 100%; padding: 14px 0; }
@@ -813,3 +815,22 @@ body {
 @media (max-width: 560px) {
   .admin-topic-grid { grid-template-columns: 1fr; }
 }
+
+/* ==================== 分数を大きく＋帯分数入力＋A4下線 ==================== */
+/* 分数の分子・分母の数字を 2まわり大きく（表示・答え） */
+.fr { font-size: 1.18em; }
+.frac .fld { width: 86px; font-size: 28px; }
+.frac-bar { width: 98px; }
+
+/* 帯分数の入力（整数部 ＋ 分子／分母） */
+.ans-mixed { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.ans-mixed .mix-w { width: 62px; }
+
+/* 10問テストの一覧では分数入力をコンパクトに保つ */
+.test-body .frac .fld { width: 52px; font-size: 19px; }
+.test-body .frac-bar { width: 60px; }
+.test-body .ans-mixed { gap: 6px; }
+.test-body .ans-mixed .mix-w { width: 42px; font-size: 19px; }
+
+/* A4：答えの下線を 問題の分母のすぐ下（＝分数の下端）と同じ高さにそろえる */
+.a4-q { align-items: flex-end; }

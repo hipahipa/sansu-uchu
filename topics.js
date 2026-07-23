@@ -58,10 +58,13 @@ const TOPICS = [
         if (a + b <= 10 && Math.random() < 0.6) b = R(11 - a, 9); // くり上がり狙い
         return { text: `${a} + ${b}`, a, b, op: "+", answer: a + b };
       } else {
-        // ひき算（くり下がりを半分くらい入れる）
-        let a = R(11, 18), b = R(2, 9);
-        if (a - b >= 10 && Math.random() < 0.6) b = R(a - 9, 9); // くり下がり狙い
-        if (b > a) [a, b] = [b, a];
+        // ひき算（くり下がりを半分くらい／答えは必ず5以上）
+        const a = R(11, 18);
+        const bMax = Math.min(9, a - 5);      // これより大きく引くと答えが5未満になる
+        let b = R(2, bMax);
+        // くり下がりを起こしやすくする（答えが5以上になる範囲は保つ）
+        const lo = (a % 10) + 1;              // 一の位より大きく引くとくり下がり
+        if (Math.random() < 0.6 && lo <= bMax) b = R(lo, bMax);
         return { text: `${a} − ${b}`, a, b, op: "-", answer: a - b };
       }
     },
@@ -100,6 +103,7 @@ const TOPICS = [
       } else {
         let a = R(30, 98), b = R(13, 49);
         if (b > a) [a, b] = [b, a];
+        if (a - b < 5) b = R(13, a - 5);   // 答え(a−b)を必ず5以上にする
         return { text: `${a} − ${b}`, a, b, op: "-", answer: a - b };
       }
     },
@@ -319,19 +323,51 @@ const TOPICS = [
     group: "小数",
     grade: "4年",
     answerType: "dec",
-    gen() {
-      // わざと けた数の違う小数を混ぜる（位ずれ・小数点ミスを誘発）
-      const a = R(11, 89) / 10;                 // 1.1〜8.9
-      const b = Math.random() < 0.5 ? R(11, 89) / 10 : R(105, 289) / 100; // 小数第1位 or 第2位
-      if (Math.random() < 0.5) {
-        const ans = Math.round((a + b) * 100) / 100;
-        return { text: `${a} + ${b}`, a, b, op: "+", answer: ans };
-      } else {
-        let x = a, y = b;
-        if (y > x) [x, y] = [y, x];
-        const ans = Math.round((x - y) * 100) / 100;
-        return { text: `${x} − ${y}`, a: x, b: y, op: "-", answer: ans };
+    // 10問の構成（i=0..9）:
+    //   1,2問: 小数第1位どうしの たし算   3,4問: 小数第1位どうしの ひき算
+    //   5,6問: 整数 − 小数第1位            7,8問: 小数第2位どうしの たし算
+    //   9,10問: 小数第2位どうしの ひき算  （小数はすべて整数を除く）
+    gen(i) {
+      if (i == null) i = R(0, 9);
+      // 小数第1位の数（0.1〜8.9・小数第1位が0にならない＝整数を除く）
+      const oneDec = () => { let n; do { n = R(1, 89); } while (n % 10 === 0); return n / 10; };
+      // 小数第2位の数（0.01〜8.99・小数第2位が0にならない＝整数を除く・必ず第2位まである）
+      const twoDec = () => { let f; do { f = R(1, 99); } while (f % 10 === 0); return (R(0, 8) * 100 + f) / 100; };
+      // 同じ数どうし（答え0）を避けて2つ作る
+      const two = (make) => { let a = make(), b = make(), g = 0; while (b === a && g++ < 20) b = make(); return [a, b]; };
+
+      if (i < 2) {                       // 第1,2問：小数第1位どうしの たし算
+        const [a, b] = two(oneDec);
+        return { text: `${a} + ${b}`, a, b, op: "+", answer: round2(a + b) };
       }
+      if (i < 4) {                       // 第3,4問：小数第1位どうしの ひき算
+        let [a, b] = two(oneDec);
+        if (b > a) [a, b] = [b, a];
+        return { text: `${a} − ${b}`, a, b, op: "-", answer: round2(a - b) };
+      }
+      if (i < 6) {                       // 第5,6問：整数 − 小数第1位（整数を除く）
+        const d = oneDec();
+        const w = R(Math.ceil(d), 10);   // d より大きい整数 → 差は小数第1位の数になる
+        return { text: `${w} − ${d}`, a: w, b: d, op: "-", answer: round2(w - d) };
+      }
+      if (i < 8) {                       // 第7,8問：小数第2位どうしの たし算
+        if (i === 7) {
+          // 第8問：答えが 整数 または 小数第1位までの数になる
+          // （2つの小数第2位を足して10 → 第2位が0にくり上がる）
+          const a = twoDec();
+          const ha = Math.round(a * 100) % 10;          // a の小数第2位（1〜9）
+          const hb = 10 - ha;                           // 足して10 → 第2位が0（1〜9）
+          let b, g = 0;
+          do { b = (R(0, 8) * 100 + R(0, 9) * 10 + hb) / 100; } while (b === a && g++ < 20);
+          return { text: `${a} + ${b}`, a, b, op: "+", answer: round2(a + b) };
+        }
+        const [a, b] = two(twoDec);
+        return { text: `${a} + ${b}`, a, b, op: "+", answer: round2(a + b) };
+      }
+      // 第9,10問：小数第2位どうしの ひき算
+      let [a, b] = two(twoDec);
+      if (b > a) [a, b] = [b, a];
+      return { text: `${a} − ${b}`, a, b, op: "-", answer: round2(a - b) };
     },
     diagnose(ans, p) {
       if (Math.abs(ans - p.answer) < 1e-9) return { correct: true };
@@ -419,9 +455,15 @@ const TOPICS = [
         pairs = [["m²", "cm²", 10000], ["a", "m²", 100], ["ha", "a", 100], ["ha", "m²", 10000], ["km²", "ha", 100]];
       }
       const [big, small, F] = pick(pairs);
-      // 大きい単位での値 v（整数／小数第1位／第2位）。かけ算しかしないので
-      // 小さい単位での値も v の桁数以下 → 答えも必ず小数第2位までに収まる。
-      const v = round2(niceUnitVal());
+      // 第1,3,5,6,8,9問（i=0,2,4,5,7,8）は 問題も答えも整数になる（v を整数にする）。
+      // 第2,4,7,10問（i=1,3,6,9）は 小数（整数を除く）を使う。
+      const intOnly = (i === 0 || i === 2 || i === 4 || i === 5 || i === 7 || i === 8);
+      let v;
+      if (intOnly) {
+        v = R(1, 9);                                   // 整数 → src も答えも必ず整数
+      } else {
+        do { v = round2(niceUnitVal()); } while (Number.isInteger(v)); // 小数（整数を除く）
+      }
       const bigVal = v;
       const smallVal = round2(v * F);
       if (Math.random() < 0.5) {
@@ -475,41 +517,82 @@ const TOPICS = [
     emoji: "🍕",
     group: "分数",
     grade: "4年",
-    answerType: "frac",
-    gen() {
+    answerType: "mixed",   // 答えが1より大きいときは帯分数で答える
+    // 10問の構成（i=0..9・分母は同じ）:
+    //  1,2,3: 真分数＋真分数（答え≤1）   4,5: 1−真分数
+    //  6: 真分数＋真分数（1<答え<2）      7: 帯分数(<2)＋真分数
+    //  8: 帯分数(<2)＋帯分数(<2)          9: 帯分数(<2)−真分数
+    //  10: 帯分数(2〜3)−帯分数(1〜2)
+    gen(i) {
+      if (i == null) i = R(0, 9);
       const d = R(3, 9);
-      if (Math.random() < 0.5) {
-        const a = R(1, d - 1), b = R(1, d - 1);
-        const [n, dd] = reduceFrac(a + b, d);
-        return { text: `${a}/${d} + ${b}/${d}`, a, b, d, op: "+", answer: { n: a + b, d }, reduced: [n, dd] };
-      } else {
-        // ひき算：答えが0にならないよう 分子を x>y にする
-        const x = R(2, d - 1), y = R(1, x - 1);
-        const [n, dd] = reduceFrac(x - y, d);
-        return { text: `${x}/${d} − ${y}/${d}`, a: x, b: y, d, op: "-", answer: { n: x - y, d }, reduced: [n, dd] };
+      const proper = () => R(1, d - 1);
+      let p1, p2, op;
+      if (i <= 2) {                 // Q1,2,3：真分数＋真分数（答え≤1）
+        op = "+";
+        const a = R(1, d - 1), b = R(1, d - a);      // a+b ≤ d
+        p1 = { w: 0, n: a }; p2 = { w: 0, n: b };
+      } else if (i <= 4) {          // Q4,5：1 − 真分数
+        op = "-";
+        p1 = { w: 1, n: 0 }; p2 = { w: 0, n: proper() };
+      } else if (i === 5) {         // Q6：真分数＋真分数（1<答え<2）
+        op = "+";
+        const sum = R(d + 1, 2 * d - 2);             // d < sum < 2d
+        const a = R(Math.max(1, sum - (d - 1)), Math.min(d - 1, sum - 1));
+        p1 = { w: 0, n: a }; p2 = { w: 0, n: sum - a };
+      } else if (i === 6) {         // Q7：2未満の帯分数 ＋ 真分数
+        op = "+";
+        p1 = { w: 1, n: proper() }; p2 = { w: 0, n: proper() };
+      } else if (i === 7) {         // Q8：2未満の帯分数 ＋ 2未満の帯分数
+        op = "+";
+        p1 = { w: 1, n: proper() }; p2 = { w: 1, n: proper() };
+      } else if (i === 8) {         // Q9：2未満の帯分数 − 真分数
+        op = "-";
+        p1 = { w: 1, n: proper() }; p2 = { w: 0, n: proper() };
+      } else {                      // Q10：2〜3の帯分数 − 1〜2の帯分数
+        op = "-";
+        p1 = { w: 2, n: proper() }; p2 = { w: 1, n: proper() };
       }
+      const v1 = p1.w * d + p1.n, v2 = p2.w * d + p2.n;   // 分母dの分子に直す
+      const total = op === "+" ? v1 + v2 : v1 - v2;
+      const [rn, rd] = reduceFrac(total, d);
+      return { parts: [p1, p2], d, op, answer: { n: total, d }, reduced: [rn, rd] };
     },
+    // 帯分数・真分数・整数(1)を表示
     display(p) {
-      return `${fr(p.a, p.d)} ${p.op === "+" ? "＋" : "−"} ${fr(p.b, p.d)} ＝`;
+      const term = (t) =>
+        t.w > 0 && t.n > 0 ? `${t.w}${fr(t.n, p.d)}`      // 帯分数
+          : t.w > 0 ? `${t.w}`                             // 整数（例：1）
+            : fr(t.n, p.d);                                // 真分数
+      return `${term(p.parts[0])} ${p.op === "+" ? "＋" : "−"} ${term(p.parts[1])} ＝`;
     },
     diagnose(ans, p) {
-      const val = ans.d ? ans.n / ans.d : NaN;
+      const w = ans.w || 0, nn = ans.n || 0, dd = ans.d || 1;
+      const val = w + (dd ? nn / dd : NaN);
       const target = p.answer.n / p.answer.d;
-      if (Math.abs(val - target) < 1e-9) {
-        // 大きさが合っていても、既約分数でなければ不正解にする
-        const [rn, rd] = p.reduced;
-        if (ans.n === rn && ans.d === rd) return { correct: true };
-        return miss("not-reduced", "約分して 答えよう",
-          `大きさは合っているよ。でも これ以上わり切れない形（既約分数）にしよう。`,
-          `${ans.n}/${ans.d} は ${rn}/${rd} に 約分できるよ。`);
+      if (Math.abs(val - target) >= 1e-9) {
+        // 真分数どうしのたし算で「分母どうしも たした」誤り
+        if (p.op === "+" && p.parts[0].w === 0 && p.parts[1].w === 0) {
+          const a = p.parts[0].n, b = p.parts[1].n;
+          if (w === 0 && nn === a + b && dd === p.d + p.d)
+            return miss("add-denominator", "分母は たさないよ",
+              `同じ分母どうしなら、分子だけ たすよ。分母 ${p.d} は そのまま。`,
+              `${a}/${p.d}＋${b}/${p.d}＝(${a}＋${b})/${p.d} だよ。`);
+        }
+        return WRONG;
       }
-      // 分母どうしも足した／引いた
-      const badD = p.op === "+" ? p.d + p.d : p.d - p.d;
-      if ((p.op === "+" && ans.n === p.a + p.b && ans.d === p.d + p.d))
-        return miss("add-denominator", "分母は たさないよ",
-          `同じ分母どうしなら、分子だけ たすよ。分母 ${p.d} は そのまま。`,
-          `${p.a}/${p.d}＋${p.b}/${p.d}＝(${p.a}＋${p.b})/${p.d} だよ。`);
-      return WRONG;
+      // 大きさは合っている → 形（既約・帯分数）をチェック
+      if (nn !== 0 && gcd(nn, dd) !== 1) {
+        const [rn2, rd2] = reduceFrac(nn, dd);
+        return miss("not-reduced", "約分して 答えよう",
+          "大きさは合っているよ。分数は これ以上わり切れない形にしよう。",
+          `${nn}/${dd} は ${rn2}/${rd2} に 約分できるよ。`);
+      }
+      if (target >= 1 && nn !== 0 && nn >= dd)
+        return miss("use-mixed", "帯分数に なおそう",
+          "1より大きい分数は 整数と分数に分けた「帯分数」で 答えるよ。",
+          `${nn}/${dd} は ${Math.floor(nn / dd)}と${nn % dd}/${dd}（帯分数）だよ。`);
+      return { correct: true };
     },
   },
 

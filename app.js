@@ -198,9 +198,9 @@ function wireTopBtn() {
 /* ==================== TOP画面（ログイン／ゲスト） ==================== */
 // 新規登録はTOPからはできない。アカウント作成は管理者画面からのみ。
 const ADMIN_ID = "あるこじゅく";
-const ADMIN_PW_HASH = "143955874";
+const ADMIN_PW_HASH = "921170065";
 // ゲストが遊べる単元。この順に、★4いじょうをとるごとに 次の1単元が現れる。
-const GUEST_TOPICS = ["add-sub-100", "kuku", "dec-add-sub", "area-rect"];
+const GUEST_TOPICS = ["add-sub-100", "kuku", "dec-add-sub", "reduce", "unit-convert"];
 // ゲストで いま見えている単元（★4以上を達成した数＋1つ先まで）
 function guestVisibleIds() {
   let n = 1;
@@ -399,7 +399,7 @@ function renderProfileSetup() {
       <div class="setup-err" id="setupErr"></div>
       <button class="primary-btn big-btn" id="loginBtn">ログイン</button>
       <div class="guest-sep">アカウントが なくても おためしで 遊べるよ</div>
-      <button class="next-btn big-btn" id="guestBtn">🎮 ゲストで 遊ぶ<br>（たし算ひき算・九九・小数・約分）</button>
+      <button class="next-btn big-btn" id="guestBtn">🎮 ゲストで 遊ぶ<br>（たし算ひき算・九九・小数・約分・単位）</button>
     </div>
     <div class="admin-row">
       <button class="admin-btn" id="adminBtn">管理者ログイン</button>
@@ -1225,6 +1225,16 @@ function answerInputHTMLIndexed(type, p, i) {
         <div class="frac-bar"></div>
         <input class="fld" id="fldD_${i}" inputmode="numeric" placeholder="分母" autocomplete="off">
       </div></div>`;
+  if (type === "mixed")
+    return `
+      <div class="ans-mixed">
+        <input class="fld mix-w" id="fldW_${i}" inputmode="numeric" placeholder="整数" autocomplete="off">
+        <div class="frac">
+          <input class="fld" id="fldN_${i}" inputmode="numeric" placeholder="分子" autocomplete="off">
+          <div class="frac-bar"></div>
+          <input class="fld" id="fldD_${i}" inputmode="numeric" placeholder="分母" autocomplete="off">
+        </div>
+      </div>`;
   if (type === "twofrac")
     return `
       <div class="ans-twofrac">
@@ -1270,8 +1280,26 @@ function toHalfWidth(s) {
 function pInt(v) { return parseInt(toHalfWidth(v), 10); }
 function pFloat(v) { return parseFloat(toHalfWidth(v)); }
 
+// 帯分数の読み取り（整数部が空なら0／分数部が両方空なら分数なし）
+function readMixedFrom(getVal) {
+  const wRaw = toHalfWidth(getVal("fldW"));
+  const nRaw = toHalfWidth(getVal("fldN"));
+  const dRaw = toHalfWidth(getVal("fldD"));
+  const hasFrac = nRaw !== "" || dRaw !== "";
+  if (wRaw === "" && !hasFrac) return null;          // 全部空
+  const w = wRaw === "" ? 0 : parseInt(wRaw, 10);
+  if (isNaN(w)) return null;
+  let n = 0, d = 1;
+  if (hasFrac) {
+    n = parseInt(nRaw, 10); d = parseInt(dRaw, 10);
+    if (isNaN(n) || isNaN(d)) return null;
+  }
+  return { w, n, d };
+}
+
 function readAnswerIndexed(type, i) {
   const val = (id) => (document.getElementById(`${id}_${i}`) || {}).value;
+  if (type === "mixed") return readMixedFrom(val);
   if (type === "frac") {
     const n = pInt(val("fldN")), d = pInt(val("fldD"));
     if (isNaN(n) || isNaN(d)) return null;
@@ -1426,22 +1454,21 @@ function renderPlay() {
 
     <div class="feedback" id="feedback"></div>
 
-    <div class="work-area">
-      <div class="work-left">
-        ${keypadHTML(atype)}
-      </div>
-      <div class="work-right">
-        <div class="memo-head">
-          <span>✏️ メモ（手書き）</span>
-          <button class="memo-clear" id="memoClear">消す</button>
-        </div>
-        <canvas id="memo" class="memo-canvas"></canvas>
-      </div>
-    </div>
-
     <div class="play-actions">
       <button class="primary-btn" id="checkBtn">答え合わせ</button>
       <button class="next-btn hidden" id="nextBtn">次の問題 →</button>
+    </div>
+
+    <div class="keypad-area">
+      ${keypadHTML(atype)}
+    </div>
+
+    <div class="memo-full">
+      <div class="memo-head">
+        <span>✏️ メモ（手書き）</span>
+        <button class="memo-clear" id="memoClear">消す</button>
+      </div>
+      <canvas id="memo" class="memo-canvas"></canvas>
     </div>
   `;
 
@@ -1460,6 +1487,16 @@ function answerInputHTML(type, p) {
   if (type === "frac")
     return `
       <div class="ans-frac">
+        <div class="frac">
+          <input class="fld" id="fldN" inputmode="numeric" placeholder="分子" autocomplete="off">
+          <div class="frac-bar"></div>
+          <input class="fld" id="fldD" inputmode="numeric" placeholder="分母" autocomplete="off">
+        </div>
+      </div>`;
+  if (type === "mixed")   // 帯分数：整数部 ＋ 分子／分母（真分数なら整数部は空でOK）
+    return `
+      <div class="ans-mixed">
+        <input class="fld mix-w" id="fldW" inputmode="numeric" placeholder="整数" autocomplete="off">
         <div class="frac">
           <input class="fld" id="fldN" inputmode="numeric" placeholder="分子" autocomplete="off">
           <div class="frac-bar"></div>
@@ -1509,23 +1546,19 @@ function setupInputs(type) {
   flds[0]?.focus();
 }
 
-/* ---------- 画面キーパッド ---------- */
+/* ---------- 画面キーパッド（1〜5／6〜0 の2行） ---------- */
 function keypadHTML(type) {
-  const dot = type === "dec" ? `<button class="key" data-k=".">.</button>` : `<button class="key ghost"></button>`;
+  const row = (arr) =>
+    `<div class="key-row">${arr.map((d) => `<button class="key" data-k="${d}">${d}</button>`).join("")}</div>`;
+  const dot = type === "dec" ? `<button class="key" data-k=".">.</button>` : "";
   return `
-    <div class="keypad">
-      <button class="key" data-k="7">7</button>
-      <button class="key" data-k="8">8</button>
-      <button class="key" data-k="9">9</button>
-      <button class="key" data-k="4">4</button>
-      <button class="key" data-k="5">5</button>
-      <button class="key" data-k="6">6</button>
-      <button class="key" data-k="1">1</button>
-      <button class="key" data-k="2">2</button>
-      <button class="key" data-k="3">3</button>
-      ${dot}
-      <button class="key" data-k="0">0</button>
-      <button class="key wide-key" data-k="del">⌫</button>
+    <div class="keypad keypad-2row">
+      ${row([1, 2, 3, 4, 5])}
+      ${row([6, 7, 8, 9, 0])}
+      <div class="key-row key-row-ctrl">
+        ${dot}
+        <button class="key wide-key" data-k="del">⌫ けす</button>
+      </div>
     </div>`;
 }
 function wireKeypad(type) {
@@ -1601,6 +1634,7 @@ function setupMemo() {
 
 /* ---------- 回答の読み取り ---------- */
 function readAnswer(type) {
+  if (type === "mixed") return readMixedFrom((id) => (document.getElementById(id) || {}).value);
   if (type === "frac") {
     const n = pInt(document.getElementById("fldN").value);
     const d = pInt(document.getElementById("fldD").value);
@@ -1755,9 +1789,21 @@ function logMiss(topic, res) {
   save.missLog[key].title = res.title;
 }
 
+/* 分数を 帯分数で表示する（整数／真分数／帯分数）。n/d は既約の想定。 */
+function mixedHTML(n, d) {
+  if (d === 1 || n % d === 0) return `${n / d}`;   // 整数
+  if (n < d) return fr(n, d);                       // 真分数
+  const w = Math.floor(n / d);                      // 帯分数
+  return `${w}${fr(n - w * d, d)}`;
+}
+
 /* ---------- 正答の表示 ---------- */
 function formatAnswer(topic, p) {
   const a = p.answer;
+  if (topic.answerType === "mixed") {
+    const [n, d] = p.reduced || [a.n, a.d];
+    return mixedHTML(n, d);
+  }
   if (topic.answerType === "frac") {
     // reduced があればそれを（約分・計算系）、なければ answer をそのまま（通分など）
     const [n, d] = p.reduced || [a.n, a.d];
