@@ -1099,7 +1099,7 @@ function renderTest(topic, problems) {
 
   app.innerHTML = `
     <header class="sub-head">
-      <button class="back" id="backBtn">← やめる</button>
+      <button class="back" id="backBtn">← もどる</button>
       <div class="play-score"><button class="top-btn" id="topBtn">TOP画面へ</button></div>
     </header>
     <div class="play-topic">${topic.emoji} ${topic.name} <span class="test-badge">📝 10問テスト</span></div>
@@ -1113,7 +1113,7 @@ function renderTest(topic, problems) {
       <div class="test-note">${(save.guest && !save.admin) ? "" : "「A4ダウンロード」は 5問ずつ 2ページの PDF（紙で といてね）／ "}空らんは 不正解に なるよ</div>
     </div>`;
 
-  document.getElementById("backBtn").addEventListener("click", renderHome);
+  document.getElementById("backBtn").addEventListener("click", () => renderStart(topic));
   document.getElementById("gradeBtn").addEventListener("click", () => gradeTest(topic, problems));
   document.getElementById("a4Btn")?.addEventListener("click", () => downloadA4(topic, problems));
   fitButtonText(document.getElementById("gradeBtn"));   // ボタン内テキストのフォント自動調整
@@ -1473,7 +1473,7 @@ function renderPlay() {
 
   app.innerHTML = `
     <header class="sub-head">
-      <button class="back" id="backBtn">← やめる</button>
+      <button class="back" id="backBtn">← もどる</button>
       <div class="play-score">
         <span class="chip timer" id="timerChip">⏱ ${session.timeLeft}</span>
         <span class="chip">📝 ${session.count + 1}/${QUESTIONS_PER_SESSION}</span>
@@ -1513,7 +1513,7 @@ function renderPlay() {
     </div>
   `;
 
-  document.getElementById("backBtn").addEventListener("click", renderHome);
+  document.getElementById("backBtn").addEventListener("click", () => renderStart(topic));
   document.getElementById("checkBtn").addEventListener("click", onCheck);
   document.getElementById("nextBtn").addEventListener("click", () => nextProblem(topic));
   document.getElementById("clearBtn").addEventListener("click", clearAnswer);
