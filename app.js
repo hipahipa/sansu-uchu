@@ -8,7 +8,10 @@
 const STORE_KEY = "sansu_save_v3";
 const store = loadStore();
 if (!store.rankings) store.rankings = {};   // 単元ごとの得点ランキング { topicId: [{name, score, d}] }
+if (!store.hidden) store.hidden = {};       // ユーザーに非表示にする単元 { topicId: true }
 let save = store.currentUser ? store.users[store.currentUser] : null;
+// その単元が「ユーザーには非表示」か（管理者一覧では常に表示される）
+function isHidden(id) { return !!(store.hidden && store.hidden[id]); }
 
 function loadStore() {
   try {
@@ -58,7 +61,7 @@ const UNLOCK_STARS = 4;   // 学年が開く条件：その学年までの全単
 function unlockedMax() {
   if (!save || !save.profile) return 6;
   let g = Math.min(save.profile.grade, 3);
-  while (g < 7 && TOPICS.filter((t) => gradeNum(t) <= g).every((t) => starsOf(t.id) >= UNLOCK_STARS)) g++;
+  while (g < 7 && TOPICS.filter((t) => gradeNum(t) <= g && !isHidden(t.id)).every((t) => starsOf(t.id) >= UNLOCK_STARS)) g++;
   return g;
 }
 
@@ -198,7 +201,7 @@ function wireTopBtn() {
 /* ==================== TOP画面（ログイン／ゲスト） ==================== */
 // 新規登録はTOPからはできない。アカウント作成は管理者画面からのみ。
 const ADMIN_ID = "あるこじゅく";
-const ADMIN_PW_HASH = "921170065";
+const ADMIN_PW_HASH = "731844593";
 // ゲストが遊べる単元。この順に、★4いじょうをとるごとに 次の1単元が現れる。
 const GUEST_TOPICS = ["add-sub-100", "kuku", "dec-add-sub", "reduce", "unit-convert"];
 // ゲストで いま見えている単元（★4以上を達成した数＋1つ先まで）
@@ -388,8 +391,8 @@ function renderProfileSetup() {
   app.innerHTML = `
     <header class="home-head">
       <div class="mascot-big">${MASCOT}</div>
-      <h1>算数で宇宙を旅しよう</h1>
-      <p class="tag">IDと パスワードを 入れて ログインしてね</p>
+      <h1>算数で宇宙を旅しよう<span class="by-arco">by あるこ塾</span></h1>
+      <p class="tag">S.O.加入中の みなさんは IDと パスワードを 入れて ログインしてね</p>
     </header>
     <div class="setup-card">
       <label class="setup-label">ユーザーID</label>
@@ -399,7 +402,7 @@ function renderProfileSetup() {
       <div class="setup-err" id="setupErr"></div>
       <button class="primary-btn big-btn" id="loginBtn">ログイン</button>
       <div class="guest-sep">アカウントが なくても おためしで 遊べるよ</div>
-      <button class="next-btn big-btn" id="guestBtn">🎮 ゲストで 遊ぶ<br>（たし算ひき算・九九・小数・約分・単位）</button>
+      <button class="next-btn big-btn" id="guestBtn">🎮 ゲストで 遊ぶ</button>
     </div>
     <div class="admin-row">
       <button class="admin-btn" id="adminBtn">管理者ログイン</button>
@@ -490,12 +493,26 @@ function renderAdmin() {
     <div class="admin-topic-group">
       <div class="admin-topic-gname">${g}</div>
       <div class="admin-topic-grid">
-        ${list.map((t) => `
-          <button class="admin-topic-item" data-id="${t.id}">
-            <span class="ati-emoji">${t.emoji}</span>
-            <span class="ati-name">${t.name}</span>
-            <span class="ati-grade">${t.grade}</span>
-          </button>`).join("")}
+        ${list.map((t) => {
+          const star = (STARS[t.id] || {}).name || "星";
+          const hidden = isHidden(t.id);
+          return `
+          <div class="admin-topic-item${hidden ? " is-hidden" : ""}">
+            <button class="ati-open" data-id="${t.id}">
+              <span class="ati-emoji">${t.emoji}</span>
+              <span class="ati-text">
+                <span class="ati-star">⭐ ${star}</span>
+                <span class="ati-name">${t.name}</span>
+              </span>
+              <span class="ati-grade">${t.grade}</span>
+            </button>
+            <label class="ati-toggle" title="ユーザーに表示／非表示">
+              <span class="ati-tlabel">${hidden ? "非表示" : "表示"}</span>
+              <input type="checkbox" class="ati-switch" data-id="${t.id}"${hidden ? "" : " checked"}>
+              <span class="ati-slider"></span>
+            </label>
+          </div>`;
+        }).join("")}
       </div>
     </div>`).join("");
 
@@ -521,12 +538,24 @@ function renderAdmin() {
   document.getElementById("regBtn").addEventListener("click", renderAdminRegister);
   document.getElementById("histBtn").addEventListener("click", renderAdminHistory);
   // 単元をタップ → プレビュー用の一時セッションで開く（実ユーザーの記録は汚さない）
-  document.querySelectorAll(".admin-topic-item").forEach((b) =>
+  document.querySelectorAll(".ati-open").forEach((b) =>
     b.addEventListener("click", () => {
       save = freshUser("管理者", 6);
       save.guest = true;
+      save.admin = true;   // 管理者プレビュー（A4は使える／記録は残さない）
       store.currentUser = null;
       startTopic(b.dataset.id);
+    }));
+  // 表示／非表示スライド：ONでユーザーに表示、OFFで非表示（管理者一覧では常に見える）
+  document.querySelectorAll(".ati-switch").forEach((sw) =>
+    sw.addEventListener("change", () => {
+      const id = sw.dataset.id;
+      if (sw.checked) delete store.hidden[id]; else store.hidden[id] = true;
+      persist();
+      const row = sw.closest(".admin-topic-item");
+      row.classList.toggle("is-hidden", !sw.checked);
+      const lbl = row.querySelector(".ati-tlabel");
+      if (lbl) lbl.textContent = sw.checked ? "表示" : "非表示";
     }));
 }
 
@@ -631,7 +660,7 @@ function renderHome() {
   const gIds = isGuest ? guestVisibleIds() : null;
   const visible = isGuest
     ? gIds.map((id) => TOPICS.find((t) => t.id === id)).filter(Boolean)
-    : TOPICS.filter((t) => gradeNum(t) <= un);
+    : TOPICS.filter((t) => gradeNum(t) <= un && !isHidden(t.id));
   const groups = {};
   visible.forEach((t) => { (groups[t.group] ||= []).push(t); });
 
@@ -661,7 +690,7 @@ function renderHome() {
     </div>
     <header class="home-head">
       <div class="mascot-big">${MASCOT}</div>
-      <h1>算数で宇宙を旅しよう</h1>
+      <h1>算数で宇宙を旅しよう<span class="by-arco">by あるこ塾</span></h1>
       <p class="tag">問題をといて 新しい星へ 向かおう！</p>
       ${lockBanner}
     </header>`;
@@ -1041,6 +1070,16 @@ function problemTextOf(topic, p) {
     : (/[？?]/.test(p.text) ? p.text : `${p.text} ＝`);
 }
 
+// ボタン内の文字がはみ出さないよう フォントを自動で少し小さくする
+function fitButtonText(btn, start = 16) {
+  if (!btn) return;
+  let fs = start; btn.style.fontSize = fs + "px";
+  let g = 0;
+  while (btn.scrollWidth > btn.clientWidth + 1 && fs > 10 && g++ < 14) {
+    fs -= 1; btn.style.fontSize = fs + "px";
+  }
+}
+
 function renderTest(topic, problems) {
   const rows = problems.map((p, i) => {
     const atype = effAnswerType(topic, p);
@@ -1066,17 +1105,18 @@ function renderTest(topic, problems) {
     <div class="play-topic">${topic.emoji} ${topic.name} <span class="test-badge">📝 10問テスト</span></div>
     <p class="test-lead">10問 ぜんぶ 書けたら、下の「答え合わせ」を おそう！</p>
     <div class="test-list">${rows}</div>
-    <div class="play-actions">
+    <div class="test-foot">
       <div class="test-actions-row">
-        <button class="next-btn" id="a4Btn">🖨 A4ダウンロード</button>
-        <button class="primary-btn" id="gradeBtn">答え合わせ（10問）</button>
+        ${(save.guest && !save.admin) ? "" : `<button class="next-btn" id="a4Btn">🖨 A4ダウンロード</button>`}
+        <button class="primary-btn" id="gradeBtn">答え合わせ<br>（10問）</button>
       </div>
-      <div class="test-note">「A4ダウンロード」は 5問ずつ 2ページの PDF（紙で といてね）／ 空らんは 不正解に なるよ</div>
+      <div class="test-note">${(save.guest && !save.admin) ? "" : "「A4ダウンロード」は 5問ずつ 2ページの PDF（紙で といてね）／ "}空らんは 不正解に なるよ</div>
     </div>`;
 
   document.getElementById("backBtn").addEventListener("click", renderHome);
   document.getElementById("gradeBtn").addEventListener("click", () => gradeTest(topic, problems));
-  document.getElementById("a4Btn").addEventListener("click", () => downloadA4(topic, problems));
+  document.getElementById("a4Btn")?.addEventListener("click", () => downloadA4(topic, problems));
+  fitButtonText(document.getElementById("gradeBtn"));   // ボタン内テキストのフォント自動調整
   wireTopBtn();
 
   // 入力欄は Enter / 次へ で下の欄へ送る
@@ -1455,6 +1495,7 @@ function renderPlay() {
     <div class="feedback" id="feedback"></div>
 
     <div class="play-actions">
+      <button class="clear-btn" id="clearBtn">×けす</button>
       <button class="primary-btn" id="checkBtn">答え合わせ</button>
       <button class="next-btn hidden" id="nextBtn">次の問題 →</button>
     </div>
@@ -1466,7 +1507,7 @@ function renderPlay() {
     <div class="memo-full">
       <div class="memo-head">
         <span>✏️ メモ（手書き）</span>
-        <button class="memo-clear" id="memoClear">消す</button>
+        <button class="memo-clear" id="memoClear">メモを消す</button>
       </div>
       <canvas id="memo" class="memo-canvas"></canvas>
     </div>
@@ -1475,11 +1516,19 @@ function renderPlay() {
   document.getElementById("backBtn").addEventListener("click", renderHome);
   document.getElementById("checkBtn").addEventListener("click", onCheck);
   document.getElementById("nextBtn").addEventListener("click", () => nextProblem(topic));
+  document.getElementById("clearBtn").addEventListener("click", clearAnswer);
   wireTopBtn();
 
   setupInputs(atype);
   wireKeypad(atype);
   setupMemo();
+}
+
+/* 入力した答えを ぜんぶ消して、最初の入力欄にもどす */
+function clearAnswer() {
+  document.querySelectorAll(".fld").forEach((f) => (f.value = ""));
+  const first = document.querySelector(".fld");
+  if (first) { activeField = first; first.focus(); }
 }
 
 /* ---------- 回答入力のHTML ---------- */
@@ -1550,15 +1599,15 @@ function setupInputs(type) {
 function keypadHTML(type) {
   const row = (arr) =>
     `<div class="key-row">${arr.map((d) => `<button class="key" data-k="${d}">${d}</button>`).join("")}</div>`;
-  const dot = type === "dec" ? `<button class="key" data-k=".">.</button>` : "";
+  // 小数のときだけ「.」を出す（消すボタンは「×けす」に集約）
+  const dotRow = type === "dec"
+    ? `<div class="key-row key-row-ctrl"><button class="key" data-k=".">.</button></div>`
+    : "";
   return `
     <div class="keypad keypad-2row">
       ${row([1, 2, 3, 4, 5])}
       ${row([6, 7, 8, 9, 0])}
-      <div class="key-row key-row-ctrl">
-        ${dot}
-        <button class="key wide-key" data-k="del">⌫ けす</button>
-      </div>
+      ${dotRow}
     </div>`;
 }
 function wireKeypad(type) {
@@ -1707,6 +1756,7 @@ function onCheck() {
   session.count++;
   s.played++;
   document.getElementById("checkBtn").classList.add("hidden");
+  document.getElementById("clearBtn")?.classList.add("hidden");
   const nextBtn = document.getElementById("nextBtn");
 
   if (res.correct) {
