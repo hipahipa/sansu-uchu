@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>算数で宇宙を旅しよう</title>
+  <!-- クラウド同期（Firebase / Firestore）— compat版でビルド不要 -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script>
     // キャッシュ対策：読み込みのたびに新しいクエリを付けて必ず最新を取得する。
     var __v = Date.now();

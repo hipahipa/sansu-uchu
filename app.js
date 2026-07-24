@@ -13,6 +13,75 @@ let save = store.currentUser ? store.users[store.currentUser] : null;
 // その単元が「ユーザーには非表示」か（管理者一覧では常に表示される）
 function isHidden(id) { return !!(store.hidden && store.hidden[id]); }
 
+/* ==================== クラウド同期（Firebase / Firestore） ====================
+   ・ユーザー（アカウント・記録）／ランキング／表示設定を Firestore に保存し、
+     どの端末からでも同じアカウントでログインできるようにする。
+   ・ローカル(localStorage)は「オフライン用キャッシュ」として併用。
+   ・ゲスト／管理者プレビューはクラウドに保存しない（save.guest / save.admin）。 */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBZYOHKeIfOZlJ36dUgpRc0bxxwDLjVUpI",
+  authDomain: "sansu-uchu.firebaseapp.com",
+  projectId: "sansu-uchu",
+  storageBucket: "sansu-uchu.firebasestorage.app",
+  messagingSenderId: "463512202706",
+  appId: "1:463512202706:web:95ac510514014d17366c0b",
+};
+let db = null, cloudReady = false;
+
+async function initFirebase() {
+  if (typeof firebase === "undefined" || !firebase.initializeApp) throw new Error("Firebase SDK 未読み込み");
+  if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+  db = firebase.firestore();
+  await firebase.auth().signInAnonymously();
+  cloudReady = true;
+}
+
+// クラウド → store に読み込む（全ユーザー・ランキング・表示設定）
+async function cloudLoadAll() {
+  if (!cloudReady) return;
+  const [us, rk, st] = await Promise.all([
+    db.collection("users").get(),
+    db.collection("rankings").get(),
+    db.collection("settings").doc("app").get(),
+  ]);
+  const users = {}; us.forEach((d) => (users[d.id] = d.data()));
+  const rankings = {}; rk.forEach((d) => (rankings[d.id] = d.data().list || []));
+  store.users = users;
+  store.rankings = rankings;
+  store.hidden = (st.exists && st.data().hidden) || {};
+  if (store.currentUser && store.users[store.currentUser]) save = store.users[store.currentUser];
+  persist();   // ローカルにもキャッシュ
+}
+
+// 1ユーザーぶんを保存（ゲスト・管理者プレビューは除外）
+function cloudSaveUser(name) {
+  if (!cloudReady || !name || !store.users[name]) return;
+  db.collection("users").doc(name).set(store.users[name]).catch((e) => console.warn("cloudSaveUser", e));
+}
+function cloudDeleteUser(name) {
+  if (!cloudReady || !name) return;
+  db.collection("users").doc(name).delete().catch((e) => console.warn("cloudDeleteUser", e));
+}
+// ランキングを保存（最新を読んでからマージして上書き＝取りこぼし低減）
+async function cloudSaveRanking(topicId, entry) {
+  if (!cloudReady) return;
+  try {
+    const ref = db.collection("rankings").doc(topicId);
+    const snap = await ref.get();
+    const list = (snap.exists && snap.data().list) || [];
+    if (entry) list.push(entry);
+    list.sort((a, b) => b.score - a.score);
+    if (list.length > 30) list.length = 30;
+    store.rankings[topicId] = list;   // 手元も最新化
+    await ref.set({ list });
+  } catch (e) { console.warn("cloudSaveRanking", e); }
+}
+// 表示/非表示 設定を保存
+function cloudSaveSettings() {
+  if (!cloudReady) return;
+  db.collection("settings").doc("app").set({ hidden: store.hidden || {} }).catch((e) => console.warn("cloudSaveSettings", e));
+}
+
 function loadStore() {
   try {
     const s = JSON.parse(localStorage.getItem(STORE_KEY));
@@ -431,6 +500,7 @@ function renderProfileSetup() {
     store.currentUser = name;
     save = u;
     persist();
+    cloudSaveUser(name);   // パスワード補完などの変更をクラウドへ
     renderHome();
   });
   // ゲスト：記録は端末に残さない（メモリ上だけ）
@@ -552,6 +622,7 @@ function renderAdmin() {
       const id = sw.dataset.id;
       if (sw.checked) delete store.hidden[id]; else store.hidden[id] = true;
       persist();
+      cloudSaveSettings();   // 表示/非表示を全端末に反映
       const row = sw.closest(".admin-topic-item");
       row.classList.toggle("is-hidden", !sw.checked);
       const lbl = row.querySelector(".ati-tlabel");
@@ -600,7 +671,8 @@ function renderAdminRegister() {
     store.users[name].pw = hashPw(pw);
     store.users[name].pwPlain = pw;   // 管理者一覧表で見られるように保持
     persist();
-    ok.textContent = `✅ 「${name}」（${grade}年生）を登録しました。TOP画面からログインできます`;
+    cloudSaveUser(name);   // クラウドに保存 → どの端末からもログイン可能に
+    ok.textContent = `✅ 「${name}」（${grade}年生）を登録しました。どの端末からもログインできます`;
     ok.classList.add("show");
     document.getElementById("rname").value = "";
     document.getElementById("rpw").value = "";
@@ -814,6 +886,7 @@ function renderStats() {
   wireTopBtn();
   document.getElementById("resetAllBtn").addEventListener("click", () => {
     if (confirm(`${p.name}さんの なまえ・★・きろくを 全部 消す？（ほかの人の きろくは のこるよ）`)) {
+      cloudDeleteUser(p.name);   // クラウドからも削除
       delete store.users[p.name];
       store.currentUser = null;
       save = null;
@@ -916,7 +989,8 @@ function renderStart(topic) {
       <button class="next-btn big-btn" id="testBtn">📝 10問テストモード</button>
       <div class="test-note">10問を 縦に ならべて 一気に とくよ（時間せいげん・ランキングは なし）</div>
     </div>`;
-  document.getElementById("backBtn").addEventListener("click", renderHome);
+  // 管理者プレビューから開いたときは 単元一覧（管理者画面）へ戻る
+  document.getElementById("backBtn").addEventListener("click", () => (save && save.admin) ? renderAdmin() : renderHome());
   document.getElementById("goBtn").addEventListener("click", () => beginSession(topic));
   document.getElementById("testBtn").addEventListener("click", () => beginTest(topic));
   wireTopBtn();
@@ -956,6 +1030,7 @@ function renderComplete(topic, timedOut = false) {
   save.history.push({ t: topic.id, d: new Date().toISOString(), score: c, miss: session.misses.length });
   if (save.history.length > 200) save.history = save.history.slice(-200);
   persist();
+  if (!save.guest) cloudSaveUser(save.profile.name);   // 記録をクラウドへ（全端末で同期）
 
   // 🏆 10問全部正解 → のこり秒数が「その回の点数」としてランキングに記録される
   let rankNote = "";
@@ -969,6 +1044,7 @@ function renderComplete(topic, timedOut = false) {
       if (list.length > 30) list.length = 30;
       const rank = list.indexOf(entry) + 1;
       persist();
+      cloudSaveRanking(topic.id, entry);   // ランキングをクラウドへ（全端末で共有）
       rankNote = rank > 0
         ? `<div class="rank-note">⏱ のこり <b>${score}秒</b> が 今回の点数！ ${esc(save.profile.name)}さんは <b>${rank}位</b> に ランクイン🏆</div>`
         : `<div class="rank-note">⏱ のこり <b>${score}秒</b>。おしい！ TOP30には あと一歩…</div>`;
@@ -1386,6 +1462,7 @@ function gradeTest(topic, problems) {
   if (save.history.length > 200) save.history = save.history.slice(-200);
   results.forEach((r) => { if (!r.res.correct && r.res.tag) logMiss(topic, r.res); });
   persist();
+  if (!save.guest) cloudSaveUser(save.profile.name);   // テスト結果をクラウドへ
 
   const newUn = unlockedMax();
   renderTestResult(topic, problems, results, correct, newUn > prevUn ? newUn : 0);
@@ -1895,5 +1972,17 @@ function burst() {
 }
 
 /* ---------- 起動 ---------- */
-initStars();
-renderHome();
+async function boot() {
+  initStars();
+  app.innerHTML = `<div class="cloud-loading"><div class="mascot-big">${MASCOT}</div><p>☀️ よみこみ中…</p></div>`;
+  try {
+    await initFirebase();
+    await cloudLoadAll();
+  } catch (e) {
+    // クラウドに繋がらないときは、ローカル保存のデータで続行（オフライン）
+    console.warn("クラウド接続に失敗。ローカルデータで続行します。", e);
+    if (store.currentUser && store.users[store.currentUser]) save = store.users[store.currentUser];
+  }
+  renderHome();   // save が無ければ内部で renderProfileSetup に飛ぶ
+}
+boot();

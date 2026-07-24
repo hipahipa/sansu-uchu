@@ -874,3 +874,8 @@ body {
 
 /* A4：答えの下線を 問題の分母のすぐ下（＝分数の下端）と同じ高さにそろえる */
 .a4-q { align-items: flex-end; }
+
+/* クラウド読み込み中の表示 */
+.cloud-loading { text-align: center; padding: 60px 20px; color: var(--sub); }
+.cloud-loading .mascot-big { width: 96px; height: 96px; margin: 0 auto 10px; }
+.cloud-loading p { font-weight: 900; font-size: 16px; }
