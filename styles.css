@@ -879,3 +879,11 @@ body {
 .cloud-loading { text-align: center; padding: 60px 20px; color: var(--sub); }
 .cloud-loading .mascot-big { width: 96px; height: 96px; margin: 0 auto 10px; }
 .cloud-loading p { font-weight: 900; font-size: 16px; }
+
+/* 分数の入力順は 分母→分子（DOMは分母が先）だが、見た目は分子を上に保つ */
+.ans-frac .frac .fld:first-child,
+.ans-mixed .frac .fld:first-child { order: 3; }   /* 分母（DOM先頭）→ 下 */
+.ans-frac .frac .frac-bar,
+.ans-mixed .frac .frac-bar { order: 2; }
+.ans-frac .frac .fld:last-child,
+.ans-mixed .frac .fld:last-child { order: 1; }    /* 分子（DOM末尾）→ 上 */

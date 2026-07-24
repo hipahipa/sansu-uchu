@@ -1334,21 +1334,21 @@ async function downloadA4(topic, problems) {
 
 // index 付きの回答入力欄（IDが重複しないよう _i を付ける）
 function answerInputHTMLIndexed(type, p, i) {
-  if (type === "frac")
+  if (type === "frac")   // 入力順は 分母→分子
     return `
       <div class="ans-frac"><div class="frac">
-        <input class="fld" id="fldN_${i}" inputmode="numeric" placeholder="分子" autocomplete="off">
-        <div class="frac-bar"></div>
         <input class="fld" id="fldD_${i}" inputmode="numeric" placeholder="分母" autocomplete="off">
+        <div class="frac-bar"></div>
+        <input class="fld" id="fldN_${i}" inputmode="numeric" placeholder="分子" autocomplete="off">
       </div></div>`;
-  if (type === "mixed")
+  if (type === "mixed")   // 入力順は 整数→分母→分子
     return `
       <div class="ans-mixed">
         <input class="fld mix-w" id="fldW_${i}" inputmode="numeric" placeholder="整数" autocomplete="off">
         <div class="frac">
-          <input class="fld" id="fldN_${i}" inputmode="numeric" placeholder="分子" autocomplete="off">
-          <div class="frac-bar"></div>
           <input class="fld" id="fldD_${i}" inputmode="numeric" placeholder="分母" autocomplete="off">
+          <div class="frac-bar"></div>
+          <input class="fld" id="fldN_${i}" inputmode="numeric" placeholder="分子" autocomplete="off">
         </div>
       </div>`;
   if (type === "twofrac")
@@ -1610,23 +1610,23 @@ function clearAnswer() {
 
 /* ---------- 回答入力のHTML ---------- */
 function answerInputHTML(type, p) {
-  if (type === "frac")
+  if (type === "frac")   // 入力順は 分母→分子（見た目は分子が上のまま）
     return `
       <div class="ans-frac">
         <div class="frac">
-          <input class="fld" id="fldN" inputmode="numeric" placeholder="分子" autocomplete="off">
-          <div class="frac-bar"></div>
           <input class="fld" id="fldD" inputmode="numeric" placeholder="分母" autocomplete="off">
+          <div class="frac-bar"></div>
+          <input class="fld" id="fldN" inputmode="numeric" placeholder="分子" autocomplete="off">
         </div>
       </div>`;
-  if (type === "mixed")   // 帯分数：整数部 ＋ 分子／分母（真分数なら整数部は空でOK）
+  if (type === "mixed")   // 帯分数：入力順は 整数→分母→分子（真分数なら整数部は空でOK）
     return `
       <div class="ans-mixed">
         <input class="fld mix-w" id="fldW" inputmode="numeric" placeholder="整数" autocomplete="off">
         <div class="frac">
-          <input class="fld" id="fldN" inputmode="numeric" placeholder="分子" autocomplete="off">
-          <div class="frac-bar"></div>
           <input class="fld" id="fldD" inputmode="numeric" placeholder="分母" autocomplete="off">
+          <div class="frac-bar"></div>
+          <input class="fld" id="fldN" inputmode="numeric" placeholder="分子" autocomplete="off">
         </div>
       </div>`;
   if (type === "twofrac")
