@@ -36,19 +36,17 @@ async function initFirebase() {
   cloudReady = true;
 }
 
-// クラウド → store に読み込む（全ユーザー・ランキング・表示設定）
+// クラウド → store に読み込む（ユーザー・表示設定）。ランキングは端末ごと（localStorage）のまま。
 async function cloudLoadAll() {
   if (!cloudReady) return;
-  const [us, rk, st] = await Promise.all([
+  const [us, st] = await Promise.all([
     db.collection("users").get(),
-    db.collection("rankings").get(),
     db.collection("settings").doc("app").get(),
   ]);
   const users = {}; us.forEach((d) => (users[d.id] = d.data()));
-  const rankings = {}; rk.forEach((d) => (rankings[d.id] = d.data().list || []));
   store.users = users;
-  store.rankings = rankings;
   store.hidden = (st.exists && st.data().hidden) || {};
+  // store.rankings は localStorage の値をそのまま使う（この端末だけの記録）
   if (store.currentUser && store.users[store.currentUser]) save = store.users[store.currentUser];
   persist();   // ローカルにもキャッシュ
 }
@@ -292,6 +290,7 @@ const STARS = {
   "div-long":       { name: "土星",         kind: "saturn",  c1: "#f3e0ae", c2: "#c49b58" },
   "dec-add-sub":    { name: "天王星",       kind: "uranus",  c1: "#d9f6f4", c2: "#5cc0cd" },
   "dec-mul-div":    { name: "海王星",       kind: "neptune", c1: "#8db4ff", c2: "#2e50c9" },
+  "unit-convert":   { name: "カノープス",   kind: "star",    c1: "#fff8e6", c2: "#f2c15a" },
   "frac-same":      { name: "冥王星",       kind: "pluto",   c1: "#e6cfae", c2: "#96714f" },
   "reduce":         { name: "シリウス",     kind: "star",    c1: "#ffffff", c2: "#8ab8ff" },
   "common-denom":   { name: "ベガ",         kind: "star",    c1: "#f2f8ff", c2: "#6fa8e8" },
@@ -471,7 +470,7 @@ function renderProfileSetup() {
       <div class="setup-err" id="setupErr"></div>
       <button class="primary-btn big-btn" id="loginBtn">ログイン</button>
       <div class="guest-sep">アカウントが なくても おためしで 遊べるよ</div>
-      <button class="next-btn big-btn" id="guestBtn">🎮 ゲストで 遊ぶ</button>
+      <button class="next-btn big-btn" id="guestBtn">🎮 ゲストで 遊ぶ（ランキング不参加）</button>
     </div>
     <div class="admin-row">
       <button class="admin-btn" id="adminBtn">管理者ログイン</button>
@@ -519,7 +518,7 @@ function renderAdminLogin() {
   stopTimer();
   app.innerHTML = `
     <header class="sub-head">
-      <button class="back" id="backBtn">← もどる</button>
+      <button class="back" id="backBtn">🔙</button>
       <h2>🔑 管理者ログイン</h2>
     </header>
     <div class="setup-card">
@@ -856,7 +855,7 @@ function renderStats() {
 
   app.innerHTML = `
     <header class="sub-head">
-      <button class="back" id="backBtn">← もどる</button>
+      <button class="back" id="backBtn">🔙</button>
       <h2>📊 ${esc(p.name)}さんの 学習きろく</h2>
       <div class="play-score"><button class="top-btn" id="topBtn">TOP画面へ</button></div>
     </header>
@@ -900,7 +899,7 @@ function renderStats() {
 let cur = null; // { topic, problem, answered }
 
 const QUESTIONS_PER_SESSION = 10;
-const TIME_LIMIT = 180;   // 制限時間（秒）
+const TIME_LIMIT = 100;   // 制限時間（秒）
 const TIME_BONUS = 10;    // 正解ボーナス（秒）
 
 function startTopic(id) {
@@ -916,6 +915,7 @@ function stopTimer() {
 function startTimer(topic) {
   stopTimer();
   session.timerId = setInterval(() => {
+    if (session.paused) return;   // 演出中（正解アニメ／つまずきカード読み）は時間を止める
     session.timeLeft--;
     updateTimerUI();
     if (session.timeLeft <= 0) {
@@ -946,18 +946,20 @@ window.__setTime = (t) => { session.timeLeft = t; updateTimerUI(); };
 function rankingHTML(topic) {
   const list = (store.rankings || {})[topic.id] || [];
   if (!list.length) {
-    return `<div class="rank-box empty-rank">🏆 まだ ランキングは ないよ。<br>10問全部正解して のこり秒数で 1位を ねらおう！</div>`;
+    return `<div class="rank-box empty-rank">🏆 まだ ランキングは ないよ。<br>のこり秒数（点数）で 1位を ねらおう！</div>`;
   }
   const medal = ["🥇", "🥈", "🥉"];
+  const fmtDate = (iso) => { const d = new Date(iso); return isNaN(d) ? "" : `${d.getMonth() + 1}/${d.getDate()}`; };
   return `
     <div class="rank-box">
-      <div class="rank-title">🏆 得点ランキング TOP30</div>
+      <div class="rank-title">🏆 得点ランキング TOP30（この端末）</div>
       <div class="rank-list">
         ${list.map((r, i) => `
           <div class="rank-row${i < 3 ? " top3" : ""}">
             <span class="rank-no">${medal[i] || (i + 1)}</span>
             <span class="rank-name">${esc(r.name)}</span>
-            <b class="rank-score">${r.score}<small>秒</small></b>
+            <span class="rank-date">${fmtDate(r.d)}</span>
+            <b class="rank-score">${r.score}<small>点</small></b>
           </div>`).join("")}
       </div>
     </div>`;
@@ -970,7 +972,7 @@ function renderStart(topic) {
   const sv = topicSave(topic.id);
   app.innerHTML = `
     <header class="sub-head">
-      <button class="back" id="backBtn">← もどる</button>
+      <button class="back" id="backBtn">🔙</button>
       <div class="play-score"><button class="top-btn" id="topBtn">TOP画面へ</button></div>
     </header>
     <div class="start-card">
@@ -981,13 +983,13 @@ function renderStart(topic) {
       <ul class="start-rules">
         <li>⏱ せいげん時間は <b>${TIME_LIMIT}秒</b></li>
         <li>➕ せいかいすると <b>+${TIME_BONUS}秒</b></li>
-        <li>📝 全部で <b>${QUESTIONS_PER_SESSION}問</b>。1回目のせいかいが 点数になるよ</li>
-        <li>🏆 <b>10問全部正解</b>すると、のこり秒数が スコアになって ランキングに のるよ</li>
+        <li>📝 全部で <b>${QUESTIONS_PER_SESSION}問</b>。さいごの問題をといたあと 残っている秒数が 点数になるよ</li>
+        <li>🏆 その点数が この端末の ランキングに のるよ</li>
       </ul>
       ${rankingHTML(topic)}
-      <button class="primary-btn big-btn" id="goBtn">スタート！</button>
-      <button class="next-btn big-btn" id="testBtn">📝 10問テストモード</button>
-      <div class="test-note">10問を 縦に ならべて 一気に とくよ（時間せいげん・ランキングは なし）</div>
+      <button class="primary-btn big-btn" id="goBtn">1問1答スタート！</button>
+      <button class="next-btn big-btn" id="testBtn">📝 10問テストスタート！</button>
+      <div class="test-note">10問を 縦に ならべて 一気に とくよ（${TIME_LIMIT}秒・1問正解で+${TIME_BONUS}秒／ランキングは なし）</div>
     </div>`;
   // 管理者プレビューから開いたときは 単元一覧（管理者画面）へ戻る
   document.getElementById("backBtn").addEventListener("click", () => (save && save.admin) ? renderAdmin() : renderHome());
@@ -1032,25 +1034,24 @@ function renderComplete(topic, timedOut = false) {
   persist();
   if (!save.guest) cloudSaveUser(save.profile.name);   // 記録をクラウドへ（全端末で同期）
 
-  // 🏆 10問全部正解 → のこり秒数が「その回の点数」としてランキングに記録される
+  // 点数＝さいごまでといたときに 残っている秒数。ランキング（この端末内）に日付と記録。
+  const point = Math.max(session.timeLeft, 0);
   let rankNote = "";
-  if (c === total) {
-    const score = Math.max(session.timeLeft, 0);
-    if (!save.guest) {
-      const list = (store.rankings[topic.id] ||= []);
-      const entry = { name: save.profile.name, score, d: new Date().toISOString() };
-      list.push(entry);
-      list.sort((a, b) => b.score - a.score);
-      if (list.length > 30) list.length = 30;
-      const rank = list.indexOf(entry) + 1;
-      persist();
-      cloudSaveRanking(topic.id, entry);   // ランキングをクラウドへ（全端末で共有）
-      rankNote = rank > 0
-        ? `<div class="rank-note">⏱ のこり <b>${score}秒</b> が 今回の点数！ ${esc(save.profile.name)}さんは <b>${rank}位</b> に ランクイン🏆</div>`
-        : `<div class="rank-note">⏱ のこり <b>${score}秒</b>。おしい！ TOP30には あと一歩…</div>`;
-    } else {
-      rankNote = `<div class="rank-note">⏱ のこり <b>${score}秒</b>！ ゲストの点数は ランキングに のらないよ</div>`;
-    }
+  if (timedOut) {
+    rankNote = "";   // タイムアップは記録しない（0点）
+  } else if (!save.guest) {
+    const list = (store.rankings[topic.id] ||= []);
+    const entry = { name: save.profile.name, score: point, d: new Date().toISOString() };
+    list.push(entry);
+    list.sort((a, b) => b.score - a.score);
+    if (list.length > 30) list.length = 30;
+    const rank = list.indexOf(entry) + 1;
+    persist();   // ランキングは この端末に保存（クラウド共有は今はしない）
+    rankNote = rank > 0
+      ? `<div class="rank-note">⏱ <b>${point}点</b>（のこり秒数）！ ${esc(save.profile.name)}さんは この端末で <b>${rank}位</b> 🏆</div>`
+      : `<div class="rank-note">⏱ <b>${point}点</b>（のこり秒数）。TOP30には あと一歩…</div>`;
+  } else {
+    rankNote = `<div class="rank-note">⏱ <b>${point}点</b>（のこり秒数）！ ゲストは ランキングに のらないよ</div>`;
   }
   const newUn = unlockedMax();
   const unlockMsg = newUn > prevUn
@@ -1099,7 +1100,7 @@ function renderComplete(topic, timedOut = false) {
       <div class="complete-face">${timedOut ? "⏰" : face}</div>
       ${timedOut ? `<div class="timeout-note">タイムアップ！</div>` : ""}
       <div class="complete-topic">${topic.emoji} ${topic.name}</div>
-      <div class="complete-score"><b>${c}</b><span> / ${total} せいかい</span></div>
+      <div class="complete-score"><b>${c}</b><span> / ${total} 正解</span><span class="point-badge">${point}点</span></div>
       <div class="complete-stars">${starRow(sesStars)}</div>
       <div class="complete-msg">${msg}</div>
       ${rankNote}
@@ -1136,7 +1137,15 @@ function beginTest(topic) {
     seen.add(p.text);
     problems.push(p);
   }
+  // 制限時間つき（100秒）。時間切れで自動採点。
+  testGraded = false;
+  session = { streak: 0, count: 0, correct: 0, correctSigs: new Set(), misses: [], timeLeft: TIME_LIMIT, timerId: null };
   renderTest(topic, problems);
+  session.timerId = setInterval(() => {
+    session.timeLeft--;
+    updateTimerUI();
+    if (session.timeLeft <= 0) { stopTimer(); gradeTest(topic, problems, true); }
+  }, 1000);
 }
 
 // 問題文（式＝／文章題／分数）を組み立てる（出題画面と同じルール）
@@ -1175,11 +1184,14 @@ function renderTest(topic, problems) {
 
   app.innerHTML = `
     <header class="sub-head">
-      <button class="back" id="backBtn">← もどる</button>
-      <div class="play-score"><button class="top-btn" id="topBtn">TOP画面へ</button></div>
+      <button class="back" id="backBtn">🔙</button>
+      <div class="play-score">
+        <span class="chip timer" id="timerChip">⏱ ${session.timeLeft}</span>
+        <button class="top-btn" id="topBtn">TOP画面へ</button>
+      </div>
     </header>
     <div class="play-topic">${topic.emoji} ${topic.name} <span class="test-badge">📝 10問テスト</span></div>
-    <p class="test-lead">10問 ぜんぶ 書けたら、下の「答え合わせ」を おそう！</p>
+    <p class="test-lead">10問 ぜんぶ 書けたら、下の「答え合わせ」を おそう！（${TIME_LIMIT}秒・1問正解で+${TIME_BONUS}秒）</p>
     <div class="test-list">${rows}</div>
     <div class="test-foot">
       <div class="test-actions-row">
@@ -1440,7 +1452,12 @@ function readAnswerIndexed(type, i) {
   return isNaN(num) ? null : num;
 }
 
-function gradeTest(topic, problems) {
+let testGraded = false;   // タイムアップと手動採点の二重発火を防ぐ
+function gradeTest(topic, problems, timedOut = false) {
+  if (testGraded) return;
+  testGraded = true;
+  stopTimer();
+  // 点数＝のこり秒数 ＋ 正解数×10秒
   const results = problems.map((p, i) => {
     const atype = effAnswerType(topic, p);
     let ans = readAnswerIndexed(atype, i);
@@ -1464,15 +1481,17 @@ function gradeTest(topic, problems) {
   persist();
   if (!save.guest) cloudSaveUser(save.profile.name);   // テスト結果をクラウドへ
 
+  const point = Math.max(session.timeLeft, 0) + correct * TIME_BONUS;   // のこり秒数＋正解×10
   const newUn = unlockedMax();
-  renderTestResult(topic, problems, results, correct, newUn > prevUn ? newUn : 0);
+  renderTestResult(topic, problems, results, correct, newUn > prevUn ? newUn : 0, point, timedOut);
 }
 
-function renderTestResult(topic, problems, results, correct, unlockedTo) {
+function renderTestResult(topic, problems, results, correct, unlockedTo, point = 0, timedOut = false) {
   const total = problems.length;
   const sesStars = correct >= 10 ? 5 : Math.floor(correct / 2);
   let face, msg;
-  if (correct === 10) { face = "🏆"; msg = "かんぺき！ ぜんぶ 正解だよ！"; }
+  if (timedOut) { face = "⏰"; msg = "タイムアップ！ そこまでの ぶんで 採点したよ"; }
+  else if (correct === 10) { face = "🏆"; msg = "かんぺき！ ぜんぶ 正解だよ！"; }
   else if (correct >= 8) { face = "🌟"; msg = "おしい！ まん点を めざそう！"; }
   else if (correct >= 6) { face = "😊"; msg = "いいね！ もう少し！"; }
   else { face = "💪"; msg = "くりかえせば きっと のびる！"; }
@@ -1504,7 +1523,8 @@ function renderTestResult(topic, problems, results, correct, unlockedTo) {
     <div class="complete">
       <div class="complete-face">${face}</div>
       <div class="complete-topic">${topic.emoji} ${topic.name}</div>
-      <div class="complete-score"><b>${correct}</b><span> / ${total} 正解</span></div>
+      <div class="complete-score"><b>${correct}</b><span> / ${total} 正解</span><span class="point-badge">${point}点</span></div>
+      <div class="complete-sub-note">のこり秒数 ＋ 正解×${TIME_BONUS}秒 ＝ ${point}点</div>
       <div class="complete-stars">${starRow(sesStars)}</div>
       <div class="complete-msg">${msg}</div>
       ${unlockMsg}
@@ -1525,6 +1545,7 @@ function renderTestResult(topic, problems, results, correct, unlockedTo) {
 
 function renderPlay() {
   const { topic, problem } = cur;
+  session.paused = false;   // 新しい問題を表示 → タイマー再開
   const s = topicSave(topic.id);
   const atype = effAnswerType(topic, problem);
   cur.atype = atype; // 採点時に使う
@@ -1550,7 +1571,7 @@ function renderPlay() {
 
   app.innerHTML = `
     <header class="sub-head">
-      <button class="back" id="backBtn">← もどる</button>
+      <button class="back" id="backBtn">🔙</button>
       <div class="play-score">
         <span class="chip timer" id="timerChip">⏱ ${session.timeLeft}</span>
         <span class="chip">📝 ${session.count + 1}/${QUESTIONS_PER_SESSION}</span>
@@ -1830,6 +1851,7 @@ function onCheck() {
 
   /* ---- 正解、または2回目の不正解 → この問題は終わり ---- */
   cur.answered = true;
+  session.paused = true;   // 演出・つまずきカード表示の間はタイマーを止める（次の問題で再開）
   session.count++;
   s.played++;
   document.getElementById("checkBtn").classList.add("hidden");

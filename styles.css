@@ -183,8 +183,8 @@ body {
 .sub-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
 .back {
   background: rgba(255, 255, 255, .05); border: 1px solid var(--line); border-radius: 999px;
-  padding: 8px 16px; font-weight: 700; cursor: pointer; font-family: inherit;
-  font-size: 13.5px; color: var(--ink);
+  padding: 8px 12px; font-weight: 700; cursor: pointer; font-family: inherit;
+  font-size: 15px; color: var(--ink); line-height: 1; flex: 0 0 auto;
 }
 .back:hover { border-color: var(--violet); }
 .back:active { transform: translateY(1px); }
@@ -887,3 +887,12 @@ body {
 .ans-mixed .frac .frac-bar { order: 2; }
 .ans-frac .frac .fld:last-child,
 .ans-mixed .frac .fld:last-child { order: 1; }    /* 分子（DOM末尾）→ 上 */
+
+/* 結果画面の点数バッジ（正解数の右に大きく表示） */
+.complete-score .point-badge {
+  display: inline-block; margin-left: 12px; font-size: 40px; font-weight: 900;
+  color: var(--good); text-shadow: 0 0 22px rgba(74, 222, 128, .4); vertical-align: baseline;
+}
+.complete-sub-note { font-size: 12px; color: var(--sub); margin: 2px 0 4px; }
+/* ランキングの日付 */
+.rank-date { font-size: 11px; color: var(--sub); margin: 0 8px; flex: 0 0 auto; }
