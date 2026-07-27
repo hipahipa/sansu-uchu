@@ -982,7 +982,7 @@ function renderStart(topic) {
       ${sv.best ? `<div class="start-best">ベスト ${sv.best}/10</div>` : ""}
       <ul class="start-rules">
         <li>⏱ せいげん時間は <b>${TIME_LIMIT}秒</b>（延長なし）</li>
-        <li>⭐ 点数 ＝ <b>正解数×${CORRECT_POINTS}点</b> ＋ スピードボーナス（<b>のこり秒数×正解数÷10</b>）</li>
+        <li>⭐ 点数 ＝ <b>${CORRECT_POINTS}点×正解数</b> ＋ ボーナス（<b>のこり秒数×正解数÷10</b>）</li>
         <li>📝 全部で <b>${QUESTIONS_PER_SESSION}問</b>。はやく・多く正解するほど 高得点！（正解0なら0点）</li>
         <li>🏆 その点数が この端末の ランキングに のるよ（タイムアップでも 正解ぶんは 点になるよ）</li>
       </ul>
