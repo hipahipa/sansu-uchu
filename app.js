@@ -221,7 +221,7 @@ function initStars() {
   }
   document.body.appendChild(box);
 }
-const CHEERS = ["やったね！", "その調子！", "すごい！", "バッチリ！", "冴えてる！", "天才かも！"];
+const CHEERS = ["やったね！", "その調子！", "すごい！", "バッチリ！", "さえてる！", "いい感じ！"];
 const STREAK_CHEERS = { 3: "3れんぞく！🔥", 5: "5れんぞく！すごい！⭐", 10: "10れんぞく！はかせ級！👑" };
 
 /* ---------- 効果音（Web Audio・音声ファイル不要） ---------- */
@@ -902,6 +902,15 @@ const QUESTIONS_PER_SESSION = 10;
 const TIME_LIMIT = 250;      // 制限時間（秒・延長なし）
 const CORRECT_POINTS = 25;   // 正解1問ぶんの点数
 
+// 得点計算：正解数×25 ＋ のこり秒数×(正解数/10)
+// → 正解が0なら のこり秒数ボーナスも0（サボり・空欄では点が入らない）。
+function calcPoint(correct, timeLeft) {
+  const remaining = Math.max(timeLeft, 0);
+  const base = correct * CORRECT_POINTS;
+  const bonus = Math.round(remaining * correct / QUESTIONS_PER_SESSION);
+  return { base, bonus, remaining, point: base + bonus };
+}
+
 function startTopic(id) {
   const topic = TOPICS.find((t) => t.id === id);
   renderStart(topic);
@@ -973,8 +982,8 @@ function renderStart(topic) {
       ${sv.best ? `<div class="start-best">ベスト ${sv.best}/10</div>` : ""}
       <ul class="start-rules">
         <li>⏱ せいげん時間は <b>${TIME_LIMIT}秒</b>（延長なし）</li>
-        <li>⭐ 点数 ＝ <b>正解数×${CORRECT_POINTS}点</b> ＋ <b>のこり秒数</b></li>
-        <li>📝 全部で <b>${QUESTIONS_PER_SESSION}問</b>。はやく・多く正解するほど 高得点！</li>
+        <li>⭐ 点数 ＝ <b>正解数×${CORRECT_POINTS}点</b> ＋ スピードボーナス（<b>のこり秒数×正解数÷10</b>）</li>
+        <li>📝 全部で <b>${QUESTIONS_PER_SESSION}問</b>。はやく・多く正解するほど 高得点！（正解0なら0点）</li>
         <li>🏆 その点数が この端末の ランキングに のるよ（タイムアップでも 正解ぶんは 点になるよ）</li>
       </ul>
       ${rankingHTML(topic)}
@@ -1025,8 +1034,8 @@ function renderComplete(topic, timedOut = false) {
   persist();
   if (!save.guest) cloudSaveUser(save.profile.name);   // 記録をクラウドへ（全端末で同期）
 
-  // 点数＝正解数×25 ＋ のこり秒数。タイムアップでも 正解ぶんは 点になる。ランキング（この端末）に日付と記録。
-  const point = c * CORRECT_POINTS + Math.max(session.timeLeft, 0);
+  // 点数＝正解数×25 ＋ のこり秒数×(正解数/10)。正解0なら0点。ランキング（この端末）に日付と記録。
+  const { base: pBase, bonus: pBonus, point } = calcPoint(c, session.timeLeft);
   let rankNote = "";
   if (save.guest) {
     rankNote = `<div class="rank-note">⏱ <b>${point}点</b>！ ゲストは ランキングに のらないよ</div>`;
@@ -1090,7 +1099,7 @@ function renderComplete(topic, timedOut = false) {
       ${timedOut ? `<div class="timeout-note">タイムアップ！</div>` : ""}
       <div class="complete-topic">${topic.emoji} ${topic.name}</div>
       <div class="complete-score"><b>${c}</b><span> / ${total} 正解</span><span class="point-badge">${point}点</span></div>
-      <div class="complete-sub-note">正解 ${c}×${CORRECT_POINTS} ＋ のこり秒数 ＝ ${point}点</div>
+      <div class="complete-sub-note">${CORRECT_POINTS}点×${c}問 ＋ のこり秒数×${c / QUESTIONS_PER_SESSION} ＝ <b>${point}点</b></div>
       <div class="complete-stars">${starRow(sesStars)}</div>
       <div class="complete-msg">${msg}</div>
       ${rankNote}
@@ -1471,7 +1480,7 @@ function gradeTest(topic, problems, timedOut = false) {
   persist();
   if (!save.guest) cloudSaveUser(save.profile.name);   // テスト結果をクラウドへ
 
-  const point = Math.max(session.timeLeft, 0) + correct * CORRECT_POINTS;   // のこり秒数＋正解×25
+  const { base: pBase, bonus: pBonus, point } = calcPoint(correct, session.timeLeft);   // 正解×25 ＋ のこり秒数×(正解/10)
 
   // ランキング（この端末）に日付つきで記録。タイムアップでも 点があれば のる。
   let rankNote = "";
@@ -1532,7 +1541,7 @@ function renderTestResult(topic, problems, results, correct, unlockedTo, point =
       <div class="complete-face">${face}</div>
       <div class="complete-topic">${topic.emoji} ${topic.name}</div>
       <div class="complete-score"><b>${correct}</b><span> / ${total} 正解</span><span class="point-badge">${point}点</span></div>
-      <div class="complete-sub-note">正解 ${correct}×${CORRECT_POINTS} ＋ のこり秒数 ＝ ${point}点</div>
+      <div class="complete-sub-note">${CORRECT_POINTS}点×${correct}問 ＋ のこり秒数×${correct / QUESTIONS_PER_SESSION} ＝ <b>${point}点</b></div>
       <div class="complete-stars">${starRow(sesStars)}</div>
       <div class="complete-msg">${msg}</div>
       ${rankNote}

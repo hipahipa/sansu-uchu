@@ -96,7 +96,23 @@ const TOPICS = [
     group: "整数の計算",
     grade: "2年",
     answerType: "int",
-    gen() {
+    gen(i) {
+      if (i == null) i = R(0, 9);
+      // 第9問：3つのたし算（答え≤100）  (21〜33)＋(12〜39)＋(60−1つ目 or 60−2つ目)
+      if (i === 8) {
+        const a = R(21, 33), b = R(12, 39);
+        const c = pick([60 - a, 60 - b]);
+        return { text: `${a} + ${b} + ${c}`, a, b, c, op: "+", three: true, answer: a + b + c };
+      }
+      // 第10問：3つのひき算（答え≥11）  (73〜97)−(21〜39)−(1つ目−30 or 1つ目−40)
+      if (i === 9) {
+        let a, b, c, ans, t = 0;
+        do { a = R(73, 97); b = R(21, 39); c = pick([a - 30, a - 40]); ans = a - b - c; t++; }
+        while (ans < 11 && t < 200);
+        if (ans < 11) { a = R(73, 97); b = R(21, 29); c = a - 40; ans = a - b - c; } // 念のための保険（必ず11以上）
+        return { text: `${a} − ${b} − ${c}`, a, b, c, op: "-", three: true, answer: ans };
+      }
+      // 第1〜8問：2つのたし算／ひき算
       if (Math.random() < 0.5) {
         const a = R(13, 79), b = R(13, 20 - (a % 10) + 15); // くり上がりが出やすい
         return { text: `${a} + ${b}`, a, b, op: "+", answer: a + b };
@@ -109,6 +125,7 @@ const TOPICS = [
     },
     diagnose(ans, p) {
       if (ans === p.answer) return { correct: true };
+      if (p.three) return WRONG;   // 3つの計算は 典型誤答の診断はせず 不正解のみ
       if (p.op === "+") {
         // 一の位のくり上がりを十の位に足し忘れ
         const noCarry = (Math.floor(p.a / 10) + Math.floor(p.b / 10)) * 10 + ((p.a % 10) + (p.b % 10)) % 10;
