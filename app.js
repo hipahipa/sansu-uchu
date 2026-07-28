@@ -488,7 +488,7 @@ function renderProfileSetup() {
     if (!name || !pw || !u) { showErr("IDまたは パスワードが ちがうよ"); return; }
     if (!u.pw) {
       // パスワード未設定の旧アカウント → 今回の入力を登録
-      if (!/^[A-Za-z0-9]{6,}$/.test(pw)) { showErr("パスワードは 半角英数字6文字以上で 入れてね"); return; }
+      if (!/^[A-Za-z0-9]{12}$/.test(pw)) { showErr("パスワードは 半角英数字ちょうど12桁で 入れてね"); return; }
       u.pw = hashPw(pw);
       u.pwPlain = pw;
     } else if (u.pw !== hashPw(pw)) {
@@ -554,6 +554,7 @@ function renderAdmin() {
       <td>${esc(nm)}</td>
       <td class="pw-cell">${u.pwPlain ? esc(u.pwPlain) : "（不明）"}</td>
       <td>${gradeLabel(u.profile.grade)}</td>
+      <td><button class="user-del" data-name="${esc(nm)}">削除</button></td>
     </tr>`;
   }).join("");
   // すべての単元（学年の解放に関係なく全部）をグループごとに一覧表示
@@ -600,13 +601,24 @@ function renderAdmin() {
     <h3 class="sec-title">👥 ユーザー一覧（${names.length}人）</h3>
     <div class="stats-card">
       <table class="pw-table">
-        <thead><tr><th>userID</th><th>パスワード</th><th>学年</th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="3" class="pw-empty">まだ ユーザーがいません</td></tr>`}</tbody>
+        <thead><tr><th>userID</th><th>パスワード</th><th>学年</th><th>削除</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="4" class="pw-empty">まだ ユーザーがいません</td></tr>`}</tbody>
       </table>
     </div>`;
   document.getElementById("backBtn").addEventListener("click", renderProfileSetup);
   document.getElementById("regBtn").addEventListener("click", renderAdminRegister);
   document.getElementById("histBtn").addEventListener("click", renderAdminHistory);
+  // ユーザー削除（クラウド・ローカルの両方から消す）
+  document.querySelectorAll(".user-del").forEach((b) =>
+    b.addEventListener("click", () => {
+      const name = b.dataset.name;
+      if (!confirm(`「${name}」さんを 削除する？\n学習記録も 消えて もとに戻せません。`)) return;
+      cloudDeleteUser(name);
+      delete store.users[name];
+      if (store.currentUser === name) { store.currentUser = null; save = null; }
+      persist();
+      renderAdmin();   // 一覧を更新
+    }));
   // 単元をタップ → プレビュー用の一時セッションで開く（実ユーザーの記録は汚さない）
   document.querySelectorAll(".ati-open").forEach((b) =>
     b.addEventListener("click", () => {
@@ -640,8 +652,8 @@ function renderAdminRegister() {
     <div class="setup-card">
       <label class="setup-label">userID（ひらがな 12文字以下）</label>
       <input id="rname" class="setup-input" maxlength="12" placeholder="れい：はなこ" autocomplete="off">
-      <label class="setup-label">userパスワード（半角英数 10桁）</label>
-      <input id="rpw" class="setup-input" maxlength="10" placeholder="れい：abcde12345" autocomplete="off">
+      <label class="setup-label">userパスワード（半角英数 12桁）</label>
+      <input id="rpw" class="setup-input" maxlength="12" placeholder="れい：abcde1234567" autocomplete="off">
       <label class="setup-label">がくねん</label>
       <div class="grade-row">
         ${[1, 2, 3, 4, 5, 6].map((g) =>
@@ -665,7 +677,7 @@ function renderAdminRegister() {
     err.classList.remove("show"); ok.classList.remove("show");
     const showErr = (m) => { err.textContent = m; err.classList.add("show"); };
     if (!/^[ぁ-んー]{1,12}$/.test(name)) { showErr("userIDは ひらがな12文字以下 で入力してください"); return; }
-    if (!/^[A-Za-z0-9]{10}$/.test(pw)) { showErr("パスワードは 半角英数字ちょうど10桁 で入力してください"); return; }
+    if (!/^[A-Za-z0-9]{12}$/.test(pw)) { showErr("パスワードは 半角英数字ちょうど12桁 で入力してください"); return; }
     if (store.users[name]) { showErr(`「${name}」は すでに登録されています`); return; }
     store.users[name] = freshUser(name, grade);
     store.users[name].pw = hashPw(pw);

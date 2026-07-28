@@ -896,3 +896,18 @@ body {
 .complete-sub-note { font-size: 12px; color: var(--sub); margin: 2px 0 4px; }
 /* ランキングの日付 */
 .rank-date { font-size: 11px; color: var(--sub); margin: 0 8px; flex: 0 0 auto; }
+
+/* 複合単位の答え入力（□kg □g など） */
+.ans-units { display: flex; align-items: baseline; justify-content: center; gap: 4px 10px; flex-wrap: wrap; }
+.unit-slot { display: inline-flex; align-items: baseline; gap: 3px; }
+.ans-units .fld { width: 68px; }
+.ans-units .unit { font-size: 18px; color: var(--sub); font-weight: 700; }
+
+/* 管理者：ユーザー削除ボタン */
+.user-del {
+  border: 1px solid rgba(251, 113, 133, .5); background: rgba(251, 113, 133, .12);
+  color: #fda4af; border-radius: 8px; padding: 4px 10px; font-size: 12px;
+  font-weight: 900; cursor: pointer; font-family: inherit; white-space: nowrap;
+}
+.user-del:hover { background: rgba(251, 113, 133, .25); }
+.user-del:active { transform: translateY(1px); }
