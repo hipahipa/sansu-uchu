@@ -42,6 +42,40 @@ function miss(tag, title, msg, hint) {
 }
 const WRONG = { correct: false }; // 診断名なしの不正解
 
+/* ---------- 「約分」10問プラン（答えは全部ちがう／分子1は4つまで） ---------- */
+// 約分できる真分数を1つ作る（smallDenom=true なら分母4〜40、falseなら40〜99）
+function genReduceOne(smallDenom) {
+  let d, k, rd, rn, n, t = 0;
+  do {
+    d = smallDenom ? R(4, 40) : R(40, 99);
+    const facs = divisorsOver1(d).filter((f) => d / f >= 2); // 約分後の分母が2以上
+    if (facs.length) {
+      k = pick(facs); rd = d / k;
+      do { rn = R(1, rd - 1); } while (gcd(rn, rd) !== 1);
+      n = rn * k;
+    } else { rd = 0; }
+    t++;
+  } while ((!rd || rd < 2 || gcd(n, d) === 1) && t < 80);
+  if (!rd || rd < 2) return { text: "4/6", n: 4, d: 6, answer: { n: 2, d: 3 }, reduced: [2, 3] }; // 保険
+  return { text: `${n}/${d}`, n, d, answer: { n: rn, d: rd }, reduced: [rn, rd] };
+}
+let reducePlan = null;
+function buildReducePlan() {
+  const plan = [], usedAns = new Set(), usedText = new Set();
+  let unitCount = 0, guard = 0;      // unitCount＝分子1の答えの数
+  while (plan.length < 10 && guard < 3000) {
+    guard++;
+    const p = genReduceOne(plan.length < 5);
+    const key = p.reduced[0] + "/" + p.reduced[1];
+    if (usedAns.has(key) || usedText.has(p.text)) continue;      // 答え・問題文の重複は避ける
+    if (p.reduced[0] === 1 && unitCount >= 4) continue;          // 分子1の答えは4つまで
+    usedAns.add(key); usedText.add(p.text);
+    if (p.reduced[0] === 1) unitCount++;
+    plan.push(p);
+  }
+  return plan;
+}
+
 const TOPICS = [
   /* ①20以下のたし算・ひき算 ------------------------------------------ */
   {
@@ -527,6 +561,64 @@ const TOPICS = [
     },
   },
 
+  /* ㉔いろんな単位（整数）―― 長さ・重さ・かさ・時間（答えも整数・複合単位） -- */
+  {
+    id: "unit-int",
+    name: "いろんな単位（整数）",
+    emoji: "🔢",
+    group: "整数の計算",
+    grade: "3年",
+    answerType: "units",
+    // 10問の構成（i=0..9）:
+    //   1,2 長さ / 3,4 重さ / 5,6,7 かさ / 8,9,10 時間
+    //   第1,3,5,8問（i=0,2,4,7）は ＋／− を使わない「変換だけ」。ほかは ＋／−。
+    //   [大きい単位B, 小さい単位S, くり上がりの数F]。答えの大きい単位は必ず1〜9。
+    gen(i) {
+      if (i == null) i = R(0, 9);
+      const CATS = {
+        length: [["m", "cm", 100], ["km", "m", 1000], ["cm", "mm", 10]],
+        weight: [["kg", "g", 1000], ["t", "kg", 1000], ["g", "mg", 1000]],
+        volume: [["L", "mL", 1000], ["L", "dL", 10], ["dL", "mL", 100], ["kL", "L", 1000]],
+        time: [["時間", "分", 60], ["分", "秒", 60]],
+      };
+      const cat = i < 2 ? "length" : i < 4 ? "weight" : i < 7 ? "volume" : "time";
+      const [B, S, F] = pick(CATS[cat]);
+      const conversionOnly = (i === 0 || i === 2 || i === 4 || i === 7);
+
+      if (conversionOnly) {
+        const X = R(1, 9), Y = R(1, F - 1), total = X * F + Y;
+        if (Math.random() < 0.5) {
+          // 複合 → 小さい単位ひとつ（例：1m50cm ＝ □cm）
+          return { category: cat, text: `${X}${B}${Y}${S}`, ansSlots: [{ unit: S }], answer: [total] };
+        }
+        // 小さい単位ひとつ → 複合（例：400分 ＝ □時間□分）
+        return { category: cat, text: `${total}${S}`, ansSlots: [{ unit: B }, { unit: S }], answer: [X, Y] };
+      }
+
+      if (Math.random() < 0.5) {
+        // たし算：小さい単位どうし（くり上がって 大きい単位1）（例：560g＋680g＝□kg□g）
+        const op1 = R(Math.ceil(F / 2), F - 1);
+        const op2 = R(F - op1 + 1, F - 1);   // 和が F をこえる
+        const total = op1 + op2;             // F < total < 2F
+        return { category: cat, op: "+", text: `${op1}${S} ＋ ${op2}${S}`,
+          ansSlots: [{ unit: B }, { unit: S }], answer: [Math.floor(total / F), total % F] };
+      }
+      // ひき算：大きい単位 − 小さい単位（例：3m−60cm＝□m□cm）
+      const A = R(2, 9), b = R(1, F - 1);
+      const total = A * F - b;               // 大きい単位 A−1、小さい単位 F−b
+      return { category: cat, op: "-", text: `${A}${B} − ${b}${S}`,
+        ansSlots: [{ unit: B }, { unit: S }], answer: [Math.floor(total / F), total % F] };
+    },
+    diagnose(ans, p) {
+      if (Array.isArray(ans) && ans.length === p.answer.length && ans.every((v, k) => v === p.answer[k]))
+        return { correct: true };
+      // 位（くり上がり・くり下がり）のとりちがえが多いので やさしくヒント
+      return miss("unit-carry", "位（くらい）の くり上がり・くり下がりに 気をつけよう",
+        "大きい単位と 小さい単位の かんけいを 思い出そう（例：1m＝100cm、1kg＝1000g、1時間＝60分）。",
+        "たりない分は 大きい単位から かりてくる／あまった分は 大きい単位へ くり上げる、で 考えよう。");
+    },
+  },
+
   /* ⑨分数のたし算・ひき算（同分母） --------------------------------- */
   {
     id: "frac-same",
@@ -621,21 +713,11 @@ const TOPICS = [
     group: "分数",
     grade: "5年",
     answerType: "frac",
-    // 約分できる真分数のみ。0-4:分母40以下 / 5-9:分母40以上99以下。
+    // 10問セットで、答えは全部ちがう／分子1の答えは4つまで（0-4:分母40以下 / 5-9:40〜99）
     gen(i) {
       if (i == null) i = R(0, 9);
-      let d, k, rd, rn, n, t = 0;
-      do {
-        d = i < 5 ? R(4, 40) : R(40, 99);
-        const facs = divisorsOver1(d).filter((f) => d / f >= 2); // 約分後の分母が2以上
-        if (facs.length) {
-          k = pick(facs); rd = d / k;
-          do { rn = R(1, rd - 1); } while (gcd(rn, rd) !== 1);
-          n = rn * k;
-        } else { rd = 0; }
-        t++;
-      } while ((!rd || rd < 2 || gcd(n, d) === 1) && t < 80);
-      return { text: `${n}/${d}`, n, d, answer: { n: rn, d: rd }, reduced: [rn, rd] };
+      if (i === 0 || !reducePlan || reducePlan.length < 10) reducePlan = buildReducePlan();
+      return reducePlan[i] || reducePlan[reducePlan.length - 1];
     },
     display(p) { return `${fr(p.n, p.d)} ＝`; },
     diagnose(ans, p) {

@@ -270,7 +270,7 @@ function wireTopBtn() {
 const ADMIN_ID = "あるこじゅく";
 const ADMIN_PW_HASH = "731844593";
 // ゲストが遊べる単元。この順に、★4いじょうをとるごとに 次の1単元が現れる。
-const GUEST_TOPICS = ["add-sub-100", "kuku", "dec-add-sub", "reduce", "unit-convert"];
+const GUEST_TOPICS = ["kuku", "unit-int", "dec-add-sub", "reduce"];
 // ゲストで いま見えている単元（★4以上を達成した数＋1つ先まで）
 function guestVisibleIds() {
   let n = 1;
@@ -291,6 +291,7 @@ const STARS = {
   "dec-add-sub":    { name: "天王星",       kind: "uranus",  c1: "#d9f6f4", c2: "#5cc0cd" },
   "dec-mul-div":    { name: "海王星",       kind: "neptune", c1: "#8db4ff", c2: "#2e50c9" },
   "unit-convert":   { name: "カノープス",   kind: "star",    c1: "#fff8e6", c2: "#f2c15a" },
+  "unit-int":       { name: "アークトゥルス", kind: "star",  c1: "#ffe3b0", c2: "#e08a2e" },
   "frac-same":      { name: "冥王星",       kind: "pluto",   c1: "#e6cfae", c2: "#96714f" },
   "reduce":         { name: "シリウス",     kind: "star",    c1: "#ffffff", c2: "#8ab8ff" },
   "common-denom":   { name: "ベガ",         kind: "star",    c1: "#f2f8ff", c2: "#6fa8e8" },
@@ -470,7 +471,7 @@ function renderProfileSetup() {
       <div class="setup-err" id="setupErr"></div>
       <button class="primary-btn big-btn" id="loginBtn">ログイン</button>
       <div class="guest-sep">アカウントが なくても おためしで 遊べるよ</div>
-      <button class="next-btn big-btn" id="guestBtn">🎮 ゲストで 遊ぶ（ランキング不参加）</button>
+      <button class="next-btn big-btn" id="guestBtn">🎮 ゲストで 遊ぶ（毎回リセット）</button>
     </div>
     <div class="admin-row">
       <button class="admin-btn" id="adminBtn">管理者ログイン</button>
@@ -741,7 +742,7 @@ function renderHome() {
     const cur = TOPICS.find((t) => t.id === gIds[gIds.length - 1]);
     const done = gIds.length - (starsOf(cur.id) >= UNLOCK_STARS ? 0 : 1);
     if (done >= GUEST_TOPICS.length) {
-      lockBanner = `<div class="lock-banner open">🎉 ゲストの4単元 全部 ★${UNLOCK_STARS}いじょう たっせい！ アカウントを つくると もっと たくさん 遊べるよ</div>`;
+      lockBanner = `<div class="lock-banner open">🎉 ゲストモードの全単元で 全部 ★${UNLOCK_STARS}いじょう たっせいしたね！ アカウントにログインすると 記録がのこって もっとたくさん 遊べるよ</div>`;
     } else {
       lockBanner = `<div class="lock-banner">🎮 ゲストモード（${done}/${GUEST_TOPICS.length} クリア）：<b>${cur.name}</b> で ★${UNLOCK_STARS}いじょう（8問せいかい）を とると 次の単元が 現れるよ！ きろくは のこらないよ</div>`;
     }
@@ -1345,6 +1346,11 @@ async function downloadA4(topic, problems) {
 
 // index 付きの回答入力欄（IDが重複しないよう _i を付ける）
 function answerInputHTMLIndexed(type, p, i) {
+  if (type === "units")
+    return `<div class="ans-units">` +
+      (p.ansSlots || []).map((s, k) =>
+        `<span class="unit-slot"><input class="fld wide" id="fldU${k}_${i}" inputmode="numeric" placeholder="?" autocomplete="off"><span class="unit">${s.unit}</span></span>`
+      ).join("") + `</div>`;
   if (type === "frac")   // 入力順は 分母→分子
     return `
       <div class="ans-frac"><div class="frac">
@@ -1424,8 +1430,24 @@ function readMixedFrom(getVal) {
   return { w, n, d };
 }
 
+// 複合単位（fldU0, fldU1, …）の読み取り。ひとつでも空/NaNなら null。整数の配列を返す。
+function readUnitsFrom(getEl) {
+  const vals = [];
+  for (let k = 0; ; k++) {
+    const el = getEl(k);
+    if (!el) break;
+    const raw = toHalfWidth(el.value);
+    if (raw === "") return null;
+    const n = parseInt(raw, 10);
+    if (isNaN(n)) return null;
+    vals.push(n);
+  }
+  return vals.length ? vals : null;
+}
+
 function readAnswerIndexed(type, i) {
   const val = (id) => (document.getElementById(`${id}_${i}`) || {}).value;
+  if (type === "units") return readUnitsFrom((k) => document.getElementById(`fldU${k}_${i}`));
   if (type === "mixed") return readMixedFrom(val);
   if (type === "frac") {
     const n = pInt(val("fldN")), d = pInt(val("fldD"));
@@ -1649,6 +1671,11 @@ function clearAnswer() {
 
 /* ---------- 回答入力のHTML ---------- */
 function answerInputHTML(type, p) {
+  if (type === "units")   // 複合単位（□kg □g など）。ansSlots の数だけ 入力欄＋単位ラベル
+    return `<div class="ans-units">` +
+      (p.ansSlots || []).map((s, k) =>
+        `<span class="unit-slot"><input class="fld wide" id="fldU${k}" inputmode="numeric" placeholder="?" autocomplete="off"><span class="unit">${s.unit}</span></span>`
+      ).join("") + `</div>`;
   if (type === "frac")   // 入力順は 分母→分子（見た目は分子が上のまま）
     return `
       <div class="ans-frac">
@@ -1799,6 +1826,7 @@ function setupMemo() {
 
 /* ---------- 回答の読み取り ---------- */
 function readAnswer(type) {
+  if (type === "units") return readUnitsFrom((k) => document.getElementById(`fldU${k}`));
   if (type === "mixed") return readMixedFrom((id) => (document.getElementById(id) || {}).value);
   if (type === "frac") {
     const n = pInt(document.getElementById("fldN").value);
@@ -1964,6 +1992,8 @@ function mixedHTML(n, d) {
 /* ---------- 正答の表示 ---------- */
 function formatAnswer(topic, p) {
   const a = p.answer;
+  if (topic.answerType === "units")   // 例：1kg240g／150cm
+    return (p.ansSlots || []).map((s, k) => `${a[k]}${s.unit}`).join("");
   if (topic.answerType === "mixed") {
     const [n, d] = p.reduced || [a.n, a.d];
     return mixedHTML(n, d);
