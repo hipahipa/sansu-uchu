@@ -1276,6 +1276,7 @@ function renderTest(topic, problems) {
       if (e.key === "Enter") { e.preventDefault(); (flds[idx + 1] || document.getElementById("gradeBtn")).focus(); }
     });
   });
+  autoSizeNumberFields();   // 4桁などでも切れないよう 幅を自動調整
   flds[0]?.focus();
 }
 
@@ -1730,7 +1731,7 @@ function renderPlay() {
 
 /* 入力した答えを ぜんぶ消して、最初の入力欄にもどす */
 function clearAnswer() {
-  document.querySelectorAll(".fld").forEach((f) => (f.value = ""));
+  document.querySelectorAll(".fld").forEach((f) => { f.value = ""; f.dispatchEvent(new Event("input")); });
   const first = document.querySelector(".fld");
   if (first) { activeField = first; first.focus(); }
 }
@@ -1800,8 +1801,40 @@ function setupInputs(type) {
     f.addEventListener("focus", () => (activeField = f));
     f.addEventListener("keydown", (e) => { if (e.key === "Enter") onCheck(); });
   });
+  autoSizeNumberFields();   // 4桁などの答えでも切れないよう 幅を自動調整
   activeField = flds[0];
   flds[0]?.focus();
+}
+
+// テキストの表示幅（px）を実測する
+function measureTextWidth(text, el) {
+  const cs = getComputedStyle(el);
+  const span = measureTextWidth._s || (measureTextWidth._s = (() => {
+    const s = document.createElement("span");
+    s.style.cssText = "position:absolute;visibility:hidden;white-space:pre;top:-9999px;left:-9999px;";
+    document.body.appendChild(s); return s;
+  })());
+  span.style.fontFamily = cs.fontFamily;
+  span.style.fontSize = cs.fontSize;
+  span.style.fontWeight = cs.fontWeight;
+  span.style.letterSpacing = cs.letterSpacing;
+  span.textContent = text || "0";
+  return span.getBoundingClientRect().width;
+}
+// 数字の答え欄（1マス入力）を、入力した桁数に合わせて自動で広げる（4桁でも切れない）
+function autoSizeNumberFields(root) {
+  (root || document).querySelectorAll(".ans-single .fld, .ans-units .fld, .ans-quorem .fld").forEach((f) => {
+    const min = f.classList.contains("big") ? 100 : 66;   // 最低幅
+    const fit = () => {
+      const cs = getComputedStyle(f);
+      const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
+        + parseFloat(cs.borderLeftWidth || 0) + parseFloat(cs.borderRightWidth || 0);
+      const textW = measureTextWidth(f.value || "?", f);
+      f.style.width = Math.max(min, Math.ceil(textW + pad + 10)) + "px";
+    };
+    if (!f._autoFit) { f.addEventListener("input", fit); f._autoFit = true; }
+    fit();
+  });
 }
 
 /* ---------- 画面キーパッド（1〜5／6〜0 の2行） ---------- */
@@ -1827,6 +1860,7 @@ function wireKeypad(type) {
       const v = k.dataset.k;
       if (v === "del") activeField.value = activeField.value.slice(0, -1);
       else activeField.value += v;
+      activeField.dispatchEvent(new Event("input"));   // 幅の自動調整をはたらかせる
       activeField.focus();
     }));
 }
