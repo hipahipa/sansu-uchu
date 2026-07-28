@@ -911,3 +911,57 @@ body {
 }
 .user-del:hover { background: rgba(251, 113, 133, .25); }
 .user-del:active { transform: translateY(1px); }
+
+/* 画面上部：ログイン中ユーザー名バー（全画面共通） */
+#user-bar {
+  position: fixed; top: 0; left: 0; right: 0; height: 30px;
+  display: none; align-items: center; justify-content: center; gap: 6px;
+  background: rgba(12, 17, 45, .92); border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(6px); z-index: 60;
+}
+#user-bar-name { font-size: 13px; font-weight: 900; color: #c4b5fd; letter-spacing: .04em; }
+body.has-user-bar { padding-top: 30px; }
+
+/* 管理者：user一覧の 履歴ボタン */
+.user-hist {
+  border: 1px solid rgba(139, 92, 246, .5); background: rgba(139, 92, 246, .14);
+  color: #c4b5fd; border-radius: 8px; padding: 4px 10px; font-size: 12px;
+  font-weight: 900; cursor: pointer; font-family: inherit; white-space: nowrap;
+}
+.user-hist:hover { background: rgba(139, 92, 246, .28); }
+.user-hist:active { transform: translateY(1px); }
+
+/* 削除確認モーダル */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center;
+  background: rgba(4, 7, 20, .7); backdrop-filter: blur(3px); padding: 20px;
+}
+.modal {
+  background: linear-gradient(180deg, #1a2150 0%, #141a3d 100%); border: 1px solid var(--line);
+  border-radius: 18px; padding: 22px 20px; max-width: 360px; width: 100%; box-shadow: var(--card-shadow); text-align: center;
+}
+.modal-msg { font-size: 15px; font-weight: 700; line-height: 1.8; margin-bottom: 18px; }
+.modal-actions { display: flex; flex-direction: column; gap: 10px; }
+.danger-btn {
+  border: none; border-radius: 14px; padding: 14px 20px; font-size: 16px; font-weight: 900;
+  cursor: pointer; font-family: inherit; letter-spacing: .04em;
+  background: linear-gradient(135deg, #fb7185, #e11d48); color: #fff; box-shadow: 0 4px 20px rgba(251, 113, 133, .35);
+}
+.danger-btn:hover { filter: brightness(1.08); }
+.danger-btn:active { transform: translateY(2px); box-shadow: none; }
+
+/* ユーザー学習履歴（詳細） */
+.uh-session {
+  background: linear-gradient(180deg, #171e49 0%, #121736 100%); border: 1px solid var(--line);
+  border-radius: 14px; padding: 12px 14px; margin-bottom: 10px;
+}
+.uh-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.uh-line.sub { font-size: 13px; color: var(--sub); margin-top: 3px; }
+.uh-line.sub b { color: var(--good); }
+.uh-date { font-size: 12px; color: var(--sub); font-weight: 900; }
+.uh-wrong-head { margin-top: 8px; font-size: 12.5px; font-weight: 900; color: var(--bad); }
+.uh-wrong-item { font-size: 12.5px; line-height: 1.7; color: var(--ink); }
+.uh-wrong-item b { color: var(--good); }
+.uh-tag { color: var(--sub); font-size: 11.5px; }
+.uh-allok { margin-top: 6px; font-size: 12.5px; color: var(--good); font-weight: 700; }
+.uh-note { margin-top: 6px; font-size: 12.5px; color: var(--sub); }

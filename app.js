@@ -13,6 +13,30 @@ let save = store.currentUser ? store.users[store.currentUser] : null;
 // その単元が「ユーザーには非表示」か（管理者一覧では常に表示される）
 function isHidden(id) { return !!(store.hidden && store.hidden[id]); }
 
+/* ---------- 画面上部の「ログイン中のユーザー名」バー（全画面共通） ---------- */
+let actorName = null;   // 表示名（ユーザー名／「ゲスト」／「管理者」）。null＝ログイン画面などで非表示
+function setActor(name) { actorName = name; updateUserBar(); }
+function updateUserBar() {
+  const bar = document.getElementById("user-bar");
+  if (!bar) return;
+  if (actorName) {
+    bar.style.display = "flex";
+    bar.querySelector("#user-bar-name").textContent = "👤 " + actorName;
+    document.body.classList.add("has-user-bar");
+  } else {
+    bar.style.display = "none";
+    document.body.classList.remove("has-user-bar");
+  }
+}
+function initUserBar() {
+  if (document.getElementById("user-bar")) return;
+  const bar = document.createElement("div");
+  bar.id = "user-bar";
+  bar.innerHTML = `<span id="user-bar-name"></span>`;
+  document.body.appendChild(bar);
+  updateUserBar();
+}
+
 /* ==================== クラウド同期（Firebase / Firestore） ====================
    ・ユーザー（アカウント・記録）／ランキング／表示設定を Firestore に保存し、
      どの端末からでも同じアカウントでログインできるようにする。
@@ -457,6 +481,7 @@ function starIcon(id) {
 
 function renderProfileSetup() {
   stopTimer();
+  setActor(null);   // ログイン画面：上部バーは非表示
   app.innerHTML = `
     <header class="home-head">
       <div class="mascot-big">${MASCOT}</div>
@@ -501,6 +526,7 @@ function renderProfileSetup() {
     save = u;
     persist();
     cloudSaveUser(name);   // パスワード補完などの変更をクラウドへ
+    setActor(name);
     renderHome();
   });
   // ゲスト：記録は端末に残さない（メモリ上だけ）
@@ -509,6 +535,7 @@ function renderProfileSetup() {
     save.guest = true;
     store.currentUser = null;
     persist();
+    setActor("ゲスト");
     renderHome();
   });
   document.getElementById("adminBtn").addEventListener("click", renderAdminLogin);
@@ -535,6 +562,7 @@ function renderAdminLogin() {
     const id = document.getElementById("aid").value.trim();
     const pw = document.getElementById("apw").value.trim();
     if (id === ADMIN_ID && hashPw(pw) === ADMIN_PW_HASH) {
+      setActor("管理者");
       renderAdmin();
     } else {
       const e = document.getElementById("setupErr");
@@ -546,17 +574,6 @@ function renderAdminLogin() {
 
 /* ==================== 管理者画面 ==================== */
 function renderAdmin() {
-  const names = Object.keys(store.users);
-  // 全ユーザーの ID・パスワード一覧表
-  const rows = names.map((nm) => {
-    const u = store.users[nm];
-    return `<tr>
-      <td>${esc(nm)}</td>
-      <td class="pw-cell">${u.pwPlain ? esc(u.pwPlain) : "（不明）"}</td>
-      <td>${gradeLabel(u.profile.grade)}</td>
-      <td><button class="user-del" data-name="${esc(nm)}">削除</button></td>
-    </tr>`;
-  }).join("");
   // すべての単元（学年の解放に関係なく全部）をグループごとに一覧表示
   const tgroups = {};
   TOPICS.forEach((t) => { (tgroups[t.group] ||= []).push(t); });
@@ -592,33 +609,15 @@ function renderAdmin() {
       <button class="back" id="backBtn">← TOPへ</button>
       <h2>🛠 管理者画面</h2>
     </header>
-    <h3 class="sec-title">📚 ぜんぶの単元（${TOPICS.length}）— タップで開く</h3>
-    <div class="admin-topics">${topicsHtml}</div>
     <div class="setup-card admin-menu">
       <button class="primary-btn big-btn" id="regBtn">user新規登録</button>
-      <button class="next-btn big-btn" id="histBtn">user学習履歴</button>
+      <button class="next-btn big-btn" id="usersBtn">user一覧</button>
     </div>
-    <h3 class="sec-title">👥 ユーザー一覧（${names.length}人）</h3>
-    <div class="stats-card">
-      <table class="pw-table">
-        <thead><tr><th>userID</th><th>パスワード</th><th>学年</th><th>削除</th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="4" class="pw-empty">まだ ユーザーがいません</td></tr>`}</tbody>
-      </table>
-    </div>`;
+    <h3 class="sec-title">📚 ぜんぶの単元（${TOPICS.length}）— タップで開く</h3>
+    <div class="admin-topics">${topicsHtml}</div>`;
   document.getElementById("backBtn").addEventListener("click", renderProfileSetup);
   document.getElementById("regBtn").addEventListener("click", renderAdminRegister);
-  document.getElementById("histBtn").addEventListener("click", renderAdminHistory);
-  // ユーザー削除（クラウド・ローカルの両方から消す）
-  document.querySelectorAll(".user-del").forEach((b) =>
-    b.addEventListener("click", () => {
-      const name = b.dataset.name;
-      if (!confirm(`「${name}」さんを 削除する？\n学習記録も 消えて もとに戻せません。`)) return;
-      cloudDeleteUser(name);
-      delete store.users[name];
-      if (store.currentUser === name) { store.currentUser = null; save = null; }
-      persist();
-      renderAdmin();   // 一覧を更新
-    }));
+  document.getElementById("usersBtn").addEventListener("click", renderAdminUsers);
   // 単元をタップ → プレビュー用の一時セッションで開く（実ユーザーの記録は汚さない）
   document.querySelectorAll(".ati-open").forEach((b) =>
     b.addEventListener("click", () => {
@@ -691,48 +690,99 @@ function renderAdminRegister() {
   });
 }
 
-/* ---------- 管理者：user学習履歴 ---------- */
-function renderAdminHistory() {
+/* ---------- 管理者：user一覧（ID・パスワード・学年・削除・学習履歴） ---------- */
+function renderAdminUsers() {
   const names = Object.keys(store.users);
-  let body;
-  if (!names.length) {
-    body = `<div class="empty">まだ ユーザーが 登録されていません</div>`;
-  } else {
-    body = names.map((n) => {
-      const u = store.users[n];
-      const played = Object.values(u.topics).reduce((a, s) => a + (s.played || 0), 0);
-      const correct = Object.values(u.topics).reduce((a, s) => a + (s.correct || 0), 0);
-      const stars = TOPICS.reduce((a, t) => {
-        const b = (u.topics[t.id] || {}).best || 0;
-        return a + (b >= 10 ? 5 : Math.floor(b / 2));
-      }, 0);
-      const recent = (u.history || []).slice(-5).reverse().map((h) => {
-        const t = TOPICS.find((x) => x.id === h.t);
-        const d = new Date(h.d);
-        return `<div class="hist-row"><span>${d.getMonth() + 1}/${d.getDate()}</span><span>${t ? t.emoji + " " + t.name : h.t}</span><b>${h.score}/10</b></div>`;
-      }).join("") || `<div class="hist-row none">まだ プレイ記録なし</div>`;
-      const misses = Object.entries(u.missLog || {}).sort((a, b) => b[1].count - a[1].count).slice(0, 2)
-        .map(([k, m]) => `<div class="hist-miss">💥 ${m.title}（${m.count}回）</div>`).join("");
-      return `
-        <div class="stats-card hist-user">
-          <div class="profile-line">
-            <b>👤 ${esc(n)}</b>
-            <span class="chip">${gradeLabel(u.profile.grade)}</span>
-            <span class="chip">⭐ ${stars}</span>
-          </div>
-          <div class="profile-line sub">といた問題 ${played}問 ／ 1回目せいかい ${correct}問${played ? `（${Math.round(correct / played * 100)}%）` : ""}</div>
-          <div class="hist-list">${recent}</div>
-          ${misses}
-        </div>`;
-    }).join("");
-  }
+  const rows = names.map((nm) => {
+    const u = store.users[nm];
+    return `<tr>
+      <td><button class="user-del" data-name="${esc(nm)}" title="削除">🗑</button></td>
+      <td>${esc(nm)}</td>
+      <td class="pw-cell">${u.pwPlain ? esc(u.pwPlain) : "（不明）"}</td>
+      <td>${gradeLabel(u.profile.grade)}</td>
+      <td><button class="user-hist" data-name="${esc(nm)}">学習履歴</button></td>
+    </tr>`;
+  }).join("");
   app.innerHTML = `
     <header class="sub-head">
       <button class="back" id="backBtn">← 管理者画面</button>
-      <h2>📊 user学習履歴</h2>
+      <h2>👥 user一覧（${names.length}人）</h2>
     </header>
-    ${body}`;
+    <div class="stats-card">
+      <table class="pw-table">
+        <thead><tr><th>削除</th><th>userID</th><th>パスワード</th><th>学年</th><th>履歴</th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="5" class="pw-empty">まだ ユーザーがいません</td></tr>`}</tbody>
+      </table>
+    </div>`;
   document.getElementById("backBtn").addEventListener("click", renderAdmin);
+  document.querySelectorAll(".user-del").forEach((b) =>
+    b.addEventListener("click", () => confirmDeleteUser(b.dataset.name)));
+  document.querySelectorAll(".user-hist").forEach((b) =>
+    b.addEventListener("click", () => renderUserHistory(b.dataset.name)));
+}
+
+/* 削除の確認（「本当に削除する」「削除キャンセル」ボタン付きのダイアログ） */
+function confirmDeleteUser(name) {
+  const ov = document.createElement("div");
+  ov.className = "modal-overlay";
+  ov.innerHTML = `
+    <div class="modal">
+      <div class="modal-msg">「${esc(name)}」さんを 削除します。<br>一度削除すると データ復元が できませんが よろしいですか。</div>
+      <div class="modal-actions">
+        <button class="danger-btn" id="mDel">本当に削除する</button>
+        <button class="next-btn" id="mCancel">削除キャンセル</button>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
+  ov.querySelector("#mCancel").addEventListener("click", close);
+  ov.querySelector("#mDel").addEventListener("click", () => {
+    cloudDeleteUser(name);
+    delete store.users[name];
+    if (store.currentUser === name) { store.currentUser = null; save = null; }
+    persist();
+    close();
+    renderAdminUsers();
+  });
+}
+
+/* ---------- 管理者：ユーザー1人の学習履歴（日付・単元・点数・正解数・誤答の詳細） ---------- */
+function renderUserHistory(name) {
+  const u = store.users[name];
+  const hist = (u.history || []).slice().reverse();   // 新しい順
+  const pad = (v) => String(v).padStart(2, "0");
+  const sessions = hist.map((h) => {
+    const t = TOPICS.find((x) => x.id === h.t);
+    const dt = new Date(h.d);
+    const ymd = `${dt.getFullYear()}/${pad(dt.getMonth() + 1)}/${pad(dt.getDate())}`;
+    const modeLabel = h.mode === "test" ? "10問テスト" : "1問1答";
+    const total = h.total || 10;
+    let detail;
+    if (h.wrong === undefined) {
+      detail = (h.miss > 0) ? `<div class="uh-note">誤答 ${h.miss}問（くわしい記録なし）</div>` : `<div class="uh-allok">✅ 全問正解！</div>`;
+    } else if (h.wrong.length) {
+      detail = `<div class="uh-wrong-head">誤答 ${h.wrong.length}問</div>` + h.wrong.map((w) =>
+        `<div class="uh-wrong-item">・${esc(w.q)} → 正解 <b>${esc(w.correct)}</b>${w.user ? `／答え ${esc(w.user)}` : ""}${w.title ? `<span class="uh-tag">（${esc(w.title)}）</span>` : ""}</div>`
+      ).join("");
+    } else {
+      detail = `<div class="uh-allok">✅ 全問正解！</div>`;
+    }
+    return `
+      <div class="uh-session">
+        <div class="uh-line"><span class="uh-date">${ymd}</span><b>${t ? t.emoji + " " + t.name : h.t}</b><span class="chip">${modeLabel}</span></div>
+        <div class="uh-line sub">${h.score}/${total} 正解${h.point != null ? ` ・ <b>${h.point}点</b>` : ""}</div>
+        ${detail}
+      </div>`;
+  }).join("") || `<div class="empty">まだ プレイ記録が ないよ</div>`;
+  app.innerHTML = `
+    <header class="sub-head">
+      <button class="back" id="backBtn">← user一覧</button>
+      <h2>📊 ${esc(name)}さんの 学習履歴</h2>
+    </header>
+    <div class="profile-line" style="margin:0 2px 10px"><span class="chip">${gradeLabel(u.profile.grade)}</span><span class="chip">記録 ${hist.length} 回</span></div>
+    ${sessions}`;
+  document.getElementById("backBtn").addEventListener("click", renderAdminUsers);
 }
 
 /* ==================== ホーム画面 ==================== */
@@ -928,7 +978,7 @@ function startTopic(id) {
   const topic = TOPICS.find((t) => t.id === id);
   renderStart(topic);
 }
-let session = { streak: 0, count: 0, correct: 0, correctSigs: new Set(), misses: [], timeLeft: TIME_LIMIT, timerId: null };
+let session = { streak: 0, count: 0, correct: 0, correctSigs: new Set(), misses: [], wrongList: [], timeLeft: TIME_LIMIT, timerId: null };
 
 /* ---------- タイマー ---------- */
 function stopTimer() {
@@ -1012,7 +1062,7 @@ function renderStart(topic) {
 }
 
 function beginSession(topic) {
-  session = { streak: 0, count: 0, correct: 0, correctSigs: new Set(), misses: [], timeLeft: TIME_LIMIT, timerId: null };
+  session = { streak: 0, count: 0, correct: 0, correctSigs: new Set(), misses: [], wrongList: [], timeLeft: TIME_LIMIT, timerId: null };
   startTimer(topic);
   nextProblem(topic);
 }
@@ -1042,13 +1092,13 @@ function renderComplete(topic, timedOut = false) {
   const sv = topicSave(topic.id);
   const prevUn = unlockedMax();
   sv.best = Math.max(sv.best || 0, c);
-  save.history.push({ t: topic.id, d: new Date().toISOString(), score: c, miss: session.misses.length });
+  const point = calcPoint(c, session.timeLeft).point;
+  save.history.push({ t: topic.id, d: new Date().toISOString(), score: c, total: QUESTIONS_PER_SESSION, point, miss: session.misses.length, wrong: session.wrongList.slice(0, 20), mode: "solo" });
   if (save.history.length > 200) save.history = save.history.slice(-200);
   persist();
   if (!save.guest) cloudSaveUser(save.profile.name);   // 記録をクラウドへ（全端末で同期）
 
-  // 点数＝正解数×25 ＋ のこり秒数×(正解数/10)。正解0なら0点。ランキング（この端末）に日付と記録。
-  const { base: pBase, bonus: pBonus, point } = calcPoint(c, session.timeLeft);
+  // 点数（point）は上で計算済み。ランキング（この端末）に日付と記録。
   let rankNote = "";
   if (save.guest) {
     rankNote = `<div class="rank-note">⏱ <b>${point}点</b>！ ゲストは ランキングに のらないよ</div>`;
@@ -1151,7 +1201,7 @@ function beginTest(topic) {
   }
   // 制限時間つき（100秒）。時間切れで自動採点。
   testGraded = false;
-  session = { streak: 0, count: 0, correct: 0, correctSigs: new Set(), misses: [], timeLeft: TIME_LIMIT, timerId: null };
+  session = { streak: 0, count: 0, correct: 0, correctSigs: new Set(), misses: [], wrongList: [], timeLeft: TIME_LIMIT, timerId: null };
   renderTest(topic, problems);
   session.timerId = setInterval(() => {
     session.timeLeft--;
@@ -1498,23 +1548,27 @@ function gradeTest(topic, problems, timedOut = false) {
     // 整数入力の分数問題は {n, d:1} に直して採点
     if (!blank && topic.answerType === "frac" && atype === "int") ans = { n: ans, d: 1 };
     const res = blank ? { correct: false } : topic.diagnose(ans, p);
-    return { p, res, blank };
+    return { p, res, blank, ans };
   });
   const correct = results.filter((r) => r.res.correct).length;
+  const point = calcPoint(correct, session.timeLeft).point;   // 正解×25 ＋ のこり秒数×(正解/10)
+  // 誤答した問題の詳細（学習履歴用）
+  const wrongList = results.filter((r) => !r.res.correct).map((r) => ({
+    q: plainProblem(topic, r.p), correct: plainAnswer(topic, r.p),
+    user: r.blank ? "（空）" : plainUserAns(r.ans), title: r.res.title || "",
+  }));
 
-  // 記録：ベスト・履歴・つまずき（ランキングは対象外）
+  // 記録：ベスト・履歴・つまずき
   const sv = topicSave(topic.id);
   const prevUn = unlockedMax();
   sv.best = Math.max(sv.best || 0, correct);
   sv.played += problems.length;
   sv.correct += correct;
-  save.history.push({ t: topic.id, d: new Date().toISOString(), score: correct, miss: problems.length - correct, mode: "test" });
+  save.history.push({ t: topic.id, d: new Date().toISOString(), score: correct, total: problems.length, point, miss: problems.length - correct, wrong: wrongList.slice(0, 20), mode: "test" });
   if (save.history.length > 200) save.history = save.history.slice(-200);
   results.forEach((r) => { if (!r.res.correct && r.res.tag) logMiss(topic, r.res); });
   persist();
   if (!save.guest) cloudSaveUser(save.profile.name);   // テスト結果をクラウドへ
-
-  const { base: pBase, bonus: pBonus, point } = calcPoint(correct, session.timeLeft);   // 正解×25 ＋ のこり秒数×(正解/10)
 
   // ランキング（この端末）に日付つきで記録。タイムアップでも 点があれば のる。
   let rankNote = "";
@@ -1887,6 +1941,8 @@ function onCheck() {
     shakeBox();
     cur.attempt = 1;
     session.streak = 0;
+    // 1回目で誤答した問題を 学習履歴用に記録
+    session.wrongList.push({ q: plainProblem(topic, problem), correct: plainAnswer(topic, problem), user: plainUserAns(ans), title: res.title || "" });
     if (res.tag) {
       logMiss(topic, res);
       session.misses.push({ tag: res.tag, title: res.title, hint: res.hint, topicName: topic.name });
@@ -2001,6 +2057,35 @@ function mixedHTML(n, d) {
   return `${w}${fr(n - w * d, d)}`;
 }
 
+/* ---------- 記録用のプレーンテキスト（学習履歴の誤答詳細で使う） ---------- */
+function plainProblem(topic, p) { return p.text || "(問題)"; }
+function plainAnswer(topic, p) {
+  const a = p.answer;
+  if (topic.answerType === "units") return (p.ansSlots || []).map((s, k) => `${a[k]}${s.unit}`).join("");
+  if (topic.answerType === "mixed") {
+    const [n, d] = p.reduced || [a.n, a.d];
+    if (d === 1 || n % d === 0) return `${n / d}`;
+    if (n > d) { const w = Math.floor(n / d); return `${w}と${n - w * d}/${d}`; }
+    return `${n}/${d}`;
+  }
+  if (topic.answerType === "frac") { const [n, d] = p.reduced || [a.n, a.d]; return d === 1 ? `${n}` : `${n}/${d}`; }
+  if (topic.answerType === "twofrac") return `(${a.n1}/${a.d}, ${a.n2}/${a.d})`;
+  if (topic.answerType === "quorem") return a.r === 0 ? `${a.q}` : `${a.q}あまり${a.r}`;
+  return `${a}${p.unit || ""}`;
+}
+function plainUserAns(ans) {
+  if (ans == null) return "（空）";
+  if (Array.isArray(ans)) return ans.join(" ");
+  if (typeof ans === "object") {
+    if ("w" in ans) return `${ans.w}と${ans.n}/${ans.d}`;
+    if ("n1" in ans) return `(${ans.n1}/${ans.d1}, ${ans.n2}/${ans.d2})`;
+    if ("q" in ans) return `${ans.q}あまり${ans.r}`;
+    if ("n" in ans) return `${ans.n}/${ans.d}`;
+    return JSON.stringify(ans);
+  }
+  return String(ans);
+}
+
 /* ---------- 正答の表示 ---------- */
 function formatAnswer(topic, p) {
   const a = p.answer;
@@ -2053,6 +2138,7 @@ function burst() {
 /* ---------- 起動 ---------- */
 async function boot() {
   initStars();
+  initUserBar();
   app.innerHTML = `<div class="cloud-loading"><div class="mascot-big">${MASCOT}</div><p>☀️ よみこみ中…</p></div>`;
   try {
     await initFirebase();
@@ -2062,6 +2148,7 @@ async function boot() {
     console.warn("クラウド接続に失敗。ローカルデータで続行します。", e);
     if (store.currentUser && store.users[store.currentUser]) save = store.users[store.currentUser];
   }
+  if (save && save.profile && !save.guest) setActor(save.profile.name);   // ログイン継続中なら名前を表示
   renderHome();   // save が無ければ内部で renderProfileSetup に飛ぶ
 }
 boot();

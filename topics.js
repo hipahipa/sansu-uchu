@@ -665,7 +665,10 @@ const TOPICS = [
       const v1 = p1.w * d + p1.n, v2 = p2.w * d + p2.n;   // 分母dの分子に直す
       const total = op === "+" ? v1 + v2 : v1 - v2;
       const [rn, rd] = reduceFrac(total, d);
-      return { parts: [p1, p2], d, op, answer: { n: total, d }, reduced: [rn, rd] };
+      // 記録用のプレーンテキスト（帯分数は「1と2/5」表記）
+      const term = (tm) => tm.w > 0 && tm.n > 0 ? `${tm.w}と${tm.n}/${d}` : tm.w > 0 ? `${tm.w}` : `${tm.n}/${d}`;
+      const text = `${term(p1)} ${op === "+" ? "＋" : "−"} ${term(p2)}`;
+      return { parts: [p1, p2], d, op, text, answer: { n: total, d }, reduced: [rn, rd] };
     },
     // 帯分数・真分数・整数(1)を表示
     display(p) {
