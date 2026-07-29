@@ -1277,6 +1277,7 @@ function renderTest(topic, problems) {
     });
   });
   autoSizeNumberFields();   // 4桁などでも切れないよう 幅を自動調整
+  wireMixIntButtons();      // 帯分数の「整数」ボタン
   flds[0]?.focus();
 }
 
@@ -1414,37 +1415,38 @@ function answerInputHTMLIndexed(type, p, i) {
       (p.ansSlots || []).map((s, k) =>
         `<span class="unit-slot"><input class="fld wide" id="fldU${k}_${i}" inputmode="numeric" placeholder="?" autocomplete="off"><span class="unit">${s.unit}</span></span>`
       ).join("") + `</div>`;
-  if (type === "frac")   // 入力順は 分母→分子
+  if (type === "frac")   // 入力順は 分母→分子（□内は空）
     return `
       <div class="ans-frac"><div class="frac">
-        <input class="fld" id="fldD_${i}" inputmode="numeric" placeholder="分母" autocomplete="off">
+        <input class="fld" id="fldD_${i}" inputmode="numeric" autocomplete="off">
         <div class="frac-bar"></div>
-        <input class="fld" id="fldN_${i}" inputmode="numeric" placeholder="分子" autocomplete="off">
+        <input class="fld" id="fldN_${i}" inputmode="numeric" autocomplete="off">
       </div></div>`;
-  if (type === "mixed")   // 入力順は 整数→分母→分子
+  if (type === "mixed")   // 標準は真分数のみ。「整数」ボタンで整数部を入力
     return `
       <div class="ans-mixed">
-        <input class="fld mix-w" id="fldW_${i}" inputmode="numeric" placeholder="整数" autocomplete="off">
+        <button type="button" class="mix-int-btn" id="mixIntBtn_${i}">整数</button>
+        <input class="fld mix-w" id="fldW_${i}" inputmode="numeric" autocomplete="off" style="display:none">
         <div class="frac">
-          <input class="fld" id="fldD_${i}" inputmode="numeric" placeholder="分母" autocomplete="off">
+          <input class="fld" id="fldD_${i}" inputmode="numeric" autocomplete="off">
           <div class="frac-bar"></div>
-          <input class="fld" id="fldN_${i}" inputmode="numeric" placeholder="分子" autocomplete="off">
+          <input class="fld" id="fldN_${i}" inputmode="numeric" autocomplete="off">
         </div>
       </div>`;
-  if (type === "twofrac")
+  if (type === "twofrac")   // 入力順は 分母→分子（□内は空）
     return `
       <div class="ans-twofrac">
         <span class="tf-paren">(</span>
         <div class="frac">
-          <input class="fld" id="fldN1_${i}" inputmode="numeric" placeholder="分子" autocomplete="off">
+          <input class="fld" id="fldD1_${i}" inputmode="numeric" autocomplete="off">
           <div class="frac-bar"></div>
-          <input class="fld" id="fldD1_${i}" inputmode="numeric" placeholder="分母" autocomplete="off">
+          <input class="fld" id="fldN1_${i}" inputmode="numeric" autocomplete="off">
         </div>
         <span class="tf-comma">,</span>
         <div class="frac">
-          <input class="fld" id="fldN2_${i}" inputmode="numeric" placeholder="分子" autocomplete="off">
+          <input class="fld" id="fldD2_${i}" inputmode="numeric" autocomplete="off">
           <div class="frac-bar"></div>
-          <input class="fld" id="fldD2_${i}" inputmode="numeric" placeholder="分母" autocomplete="off">
+          <input class="fld" id="fldN2_${i}" inputmode="numeric" autocomplete="off">
         </div>
         <span class="tf-paren">)</span>
       </div>`;
@@ -1743,39 +1745,40 @@ function answerInputHTML(type, p) {
       (p.ansSlots || []).map((s, k) =>
         `<span class="unit-slot"><input class="fld wide" id="fldU${k}" inputmode="numeric" placeholder="?" autocomplete="off"><span class="unit">${s.unit}</span></span>`
       ).join("") + `</div>`;
-  if (type === "frac")   // 入力順は 分母→分子（見た目は分子が上のまま）
+  if (type === "frac")   // 入力順は 分母→分子（見た目は分子が上のまま）／□内は空
     return `
       <div class="ans-frac">
         <div class="frac">
-          <input class="fld" id="fldD" inputmode="numeric" placeholder="分母" autocomplete="off">
+          <input class="fld" id="fldD" inputmode="numeric" autocomplete="off">
           <div class="frac-bar"></div>
-          <input class="fld" id="fldN" inputmode="numeric" placeholder="分子" autocomplete="off">
+          <input class="fld" id="fldN" inputmode="numeric" autocomplete="off">
         </div>
       </div>`;
-  if (type === "mixed")   // 帯分数：入力順は 整数→分母→分子（真分数なら整数部は空でOK）
+  if (type === "mixed")   // 標準は 真分数のみ。左の「整数」ボタンを押すと 整数部を入力できる
     return `
       <div class="ans-mixed">
-        <input class="fld mix-w" id="fldW" inputmode="numeric" placeholder="整数" autocomplete="off">
+        <button type="button" class="mix-int-btn" id="mixIntBtn">整数</button>
+        <input class="fld mix-w" id="fldW" inputmode="numeric" autocomplete="off" style="display:none">
         <div class="frac">
-          <input class="fld" id="fldD" inputmode="numeric" placeholder="分母" autocomplete="off">
+          <input class="fld" id="fldD" inputmode="numeric" autocomplete="off">
           <div class="frac-bar"></div>
-          <input class="fld" id="fldN" inputmode="numeric" placeholder="分子" autocomplete="off">
+          <input class="fld" id="fldN" inputmode="numeric" autocomplete="off">
         </div>
       </div>`;
-  if (type === "twofrac")
+  if (type === "twofrac")   // 入力順は 分母→分子（□内は空）
     return `
       <div class="ans-twofrac">
         <span class="tf-paren">(</span>
         <div class="frac">
-          <input class="fld" id="fldN1" inputmode="numeric" placeholder="分子" autocomplete="off">
+          <input class="fld" id="fldD1" inputmode="numeric" autocomplete="off">
           <div class="frac-bar"></div>
-          <input class="fld" id="fldD1" inputmode="numeric" placeholder="分母" autocomplete="off">
+          <input class="fld" id="fldN1" inputmode="numeric" autocomplete="off">
         </div>
         <span class="tf-comma">,</span>
         <div class="frac">
-          <input class="fld" id="fldN2" inputmode="numeric" placeholder="分子" autocomplete="off">
+          <input class="fld" id="fldD2" inputmode="numeric" autocomplete="off">
           <div class="frac-bar"></div>
-          <input class="fld" id="fldD2" inputmode="numeric" placeholder="分母" autocomplete="off">
+          <input class="fld" id="fldN2" inputmode="numeric" autocomplete="off">
         </div>
         <span class="tf-paren">)</span>
       </div>`;
@@ -1802,8 +1805,25 @@ function setupInputs(type) {
     f.addEventListener("keydown", (e) => { if (e.key === "Enter") onCheck(); });
   });
   autoSizeNumberFields();   // 4桁などの答えでも切れないよう 幅を自動調整
-  activeField = flds[0];
-  flds[0]?.focus();
+  wireMixIntButtons();      // 帯分数の「整数」ボタン
+  const firstVisible = flds.find((f) => f.offsetParent !== null) || flds[0];   // 隠れている整数欄は飛ばす
+  activeField = firstVisible;
+  firstVisible?.focus();
+}
+
+// 帯分数の「整数」ボタン：押すと整数の入力欄があらわれる（標準は真分数のみ）
+function wireMixIntButtons() {
+  document.querySelectorAll(".mix-int-btn").forEach((btn) => {
+    if (btn._wired) return; btn._wired = true;
+    btn.addEventListener("click", () => {
+      const w = btn.parentElement.querySelector(".mix-w");
+      if (!w) return;
+      w.style.display = "";
+      btn.style.display = "none";
+      activeField = w;
+      w.focus();
+    });
+  });
 }
 
 // テキストの表示幅（px）を実測する

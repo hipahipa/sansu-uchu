@@ -882,11 +882,23 @@ body {
 
 /* 分数の入力順は 分母→分子（DOMは分母が先）だが、見た目は分子を上に保つ */
 .ans-frac .frac .fld:first-child,
-.ans-mixed .frac .fld:first-child { order: 3; }   /* 分母（DOM先頭）→ 下 */
+.ans-mixed .frac .fld:first-child,
+.ans-twofrac .frac .fld:first-child { order: 3; }   /* 分母（DOM先頭）→ 下 */
 .ans-frac .frac .frac-bar,
-.ans-mixed .frac .frac-bar { order: 2; }
+.ans-mixed .frac .frac-bar,
+.ans-twofrac .frac .frac-bar { order: 2; }
 .ans-frac .frac .fld:last-child,
-.ans-mixed .frac .fld:last-child { order: 1; }    /* 分子（DOM末尾）→ 上 */
+.ans-mixed .frac .fld:last-child,
+.ans-twofrac .frac .fld:last-child { order: 1; }    /* 分子（DOM末尾）→ 上 */
+
+/* 帯分数の「整数」トグルボタン（真分数の左） */
+.mix-int-btn {
+  align-self: center; border: 1px solid rgba(148, 163, 255, .4); background: rgba(255, 255, 255, .05);
+  color: var(--sub); border-radius: 10px; padding: 6px 8px; font-size: 12px; font-weight: 900;
+  cursor: pointer; font-family: inherit; line-height: 1.2; white-space: nowrap;
+}
+.mix-int-btn:hover { border-color: var(--violet); color: #c4b5fd; }
+.mix-int-btn:active { transform: translateY(1px); }
 
 /* 結果画面の点数バッジ（正解数の右に大きく表示） */
 .complete-score .point-badge {

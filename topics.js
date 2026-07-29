@@ -595,6 +595,17 @@ const TOPICS = [
         return { category: cat, text: `${total}${S}`, ansSlots: [{ unit: B }, { unit: S }], answer: [X, Y] };
       }
 
+      // 第6問（i=5）＝dLを使ったたし算 ／ 第7問（i=6）＝dLを使ったひき算（答えはmL・整数）
+      if (i === 5 || i === 6) {
+        const a = R(1, 8), b = R(1, 9);   // a L, b dL
+        if (i === 5) {                    // たし算：AL ＋ BdL ＝ □mL
+          return { category: "volume", op: "+", text: `${a}L ＋ ${b}dL`, ansSlots: [{ unit: "mL" }], answer: [a * 1000 + b * 100] };
+        }
+        // ひき算：AL − BdL ＝ □mL（A≥1なら 1000 > 900 で必ず正）
+        const A = R(2, 9);
+        return { category: "volume", op: "-", text: `${A}L − ${b}dL`, ansSlots: [{ unit: "mL" }], answer: [A * 1000 - b * 100] };
+      }
+
       if (Math.random() < 0.5) {
         // たし算：小さい単位どうし（くり上がって 大きい単位1）（例：560g＋680g＝□kg□g）
         const op1 = R(Math.ceil(F / 2), F - 1);
