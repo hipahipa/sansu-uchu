@@ -485,7 +485,7 @@ function renderProfileSetup() {
   app.innerHTML = `
     <header class="home-head">
       <div class="mascot-big">${MASCOT}</div>
-      <h1>算数で宇宙を旅しよう<span class="by-arco">by あるこ塾</span></h1>
+      <h1>算数で宇宙旅行！<span class="by-arco">by あるこ塾</span></h1>
       <p class="tag">S.O.加入中の みなさんは IDと パスワードを 入れて ログインしてね</p>
     </header>
     <div class="setup-card">
@@ -824,7 +824,7 @@ function renderHome() {
     </div>
     <header class="home-head">
       <div class="mascot-big">${MASCOT}</div>
-      <h1>算数で宇宙を旅しよう<span class="by-arco">by あるこ塾</span></h1>
+      <h1>算数で宇宙旅行！<span class="by-arco">by あるこ塾</span></h1>
       <p class="tag">問題をといて 新しい星へ 向かおう！</p>
       ${lockBanner}
     </header>`;
@@ -1324,7 +1324,7 @@ function buildA4Page(topic, problems, startIndex, pageNo, pageTotal) {
       <div class="a4-meta">なまえ <span class="a4-namebox"></span></div>
     </div>
     <div class="a4-items">${items}</div>
-    <div class="a4-foot">${pageNo} / ${pageTotal} まい　　算数で宇宙を旅しよう</div>`;
+    <div class="a4-foot">${pageNo} / ${pageTotal} まい　　算数で宇宙旅行！</div>`;
   return page;
 }
 
