@@ -104,6 +104,32 @@ function cloudSaveSettings() {
   db.collection("settings").doc("app").set({ hidden: store.hidden || {} }).catch((e) => console.warn("cloudSaveSettings", e));
 }
 
+/* ---------- アクセス解析（日付ごとに クラウドで集計） ---------- */
+function todayStr() { const d = new Date(); const p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; }
+// TOP画面へのアクセス（アプリ起動）を1カウント
+function bumpTopView() {
+  if (!cloudReady) return;
+  db.collection("analytics").doc(todayStr())
+    .set({ topViews: firebase.firestore.FieldValue.increment(1) }, { merge: true })
+    .catch((e) => console.warn("bumpTopView", e));
+}
+// ユーザーのログインを1カウント（人数は名前をユニーク集計）
+function bumpLogin(name) {
+  if (!cloudReady) return;
+  db.collection("analytics").doc(todayStr())
+    .set({ logins: firebase.firestore.FieldValue.increment(1), users: firebase.firestore.FieldValue.arrayUnion(name) }, { merge: true })
+    .catch((e) => console.warn("bumpLogin", e));
+}
+// 全日の集計を読み込む（新しい順）
+async function cloudLoadAnalytics() {
+  if (!cloudReady) return [];
+  const snap = await db.collection("analytics").get();
+  const rows = [];
+  snap.forEach((d) => rows.push({ date: d.id, ...d.data() }));
+  rows.sort((a, b) => b.date.localeCompare(a.date));
+  return rows;
+}
+
 function loadStore() {
   try {
     const s = JSON.parse(localStorage.getItem(STORE_KEY));
@@ -171,36 +197,36 @@ function hashPw(pw) {
 function sunSVG(mood = "normal") {
   let face;
   if (mood === "happy") {
-    // 目を閉じて大わらい
+    // 目を閉じて 大わらい（口を大きく開けて 舌ものぞく）
     face = `
-      <path d="M45 51 Q50 45 55 51" class="sun-line"/>
-      <path d="M65 51 Q70 45 75 51" class="sun-line"/>
-      <path d="M48 60 Q60 74 72 60 Q60 65 48 60 Z" fill="#7c2d12"/>
-      <circle cx="42" cy="60" r="4.5" fill="#fb923c" opacity=".75"/>
-      <circle cx="78" cy="60" r="4.5" fill="#fb923c" opacity=".75"/>`;
+      <path d="M43 52 Q50 44 57 52" class="sun-line"/>
+      <path d="M63 52 Q70 44 77 52" class="sun-line"/>
+      <path d="M44 59 Q60 82 76 59 Q60 70 44 59 Z" fill="#7c2d12"/>
+      <path d="M55 71 Q60 78 65 71 Q60 74 55 71 Z" fill="#ff8a8a"/>
+      <circle cx="40" cy="60" r="5.2" fill="#fb7185" opacity=".55"/>
+      <circle cx="80" cy="60" r="5.2" fill="#fb7185" opacity=".55"/>`;
   } else if (mood === "think") {
-    // 上目づかい＋かた眉上げ＋汗
+    // こまり顔：かた眉上げ＋なみなみの口＋あせ
     face = `
-      <path d="M43 42 Q49 38 55 43" class="sun-line"/>
-      <path d="M65 46 Q71 44 77 46" class="sun-line"/>
-      <circle cx="49" cy="51" r="3.4" fill="#7c2d12"/>
-      <circle cx="69" cy="51" r="3.4" fill="#7c2d12"/>
-      <circle cx="50.2" cy="49.8" r="1.1" fill="#fff8e1"/>
-      <circle cx="70.2" cy="49.8" r="1.1" fill="#fff8e1"/>
-      <path d="M53 66 Q60 63 67 66" class="sun-line"/>
-      <path d="M90 36 q4.5 6.5 0 9.5 q-4.5 -3 0 -9.5" fill="#7dd3fc"/>`;
+      <path d="M43 43 Q49 38 55 44" class="sun-line"/>
+      <path d="M65 45 Q71 45 77 47" class="sun-line"/>
+      <circle cx="49" cy="51" r="3.6" fill="#7c2d12"/>
+      <circle cx="69" cy="51" r="3.6" fill="#7c2d12"/>
+      <circle cx="50.4" cy="49.6" r="1.2" fill="#fff8e1"/>
+      <circle cx="70.4" cy="49.6" r="1.2" fill="#fff8e1"/>
+      <path d="M50 66 Q55 61 60 66 Q65 71 70 66" class="sun-line"/>
+      <path d="M90 35 q5 7 0 10.5 q-5 -3.5 0 -10.5" fill="#7dd3fc"/>`;
   } else {
-    // おだやかスマイル
+    // TOP画面：ニコニコ笑顔（キラキラ目＋大きめの口＋ほっぺ）
     face = `
-      <path d="M44 45 Q50 42 56 45" class="sun-line"/>
-      <path d="M64 45 Q70 42 76 45" class="sun-line"/>
-      <circle cx="50" cy="52" r="3.4" fill="#7c2d12"/>
-      <circle cx="70" cy="52" r="3.4" fill="#7c2d12"/>
-      <circle cx="51.2" cy="50.8" r="1.1" fill="#fff8e1"/>
-      <circle cx="71.2" cy="50.8" r="1.1" fill="#fff8e1"/>
-      <path d="M50 63 Q60 70 70 63" class="sun-line"/>
-      <circle cx="43" cy="59" r="4" fill="#fb923c" opacity=".6"/>
-      <circle cx="77" cy="59" r="4" fill="#fb923c" opacity=".6"/>`;
+      <circle cx="49" cy="50" r="4.2" fill="#7c2d12"/>
+      <circle cx="71" cy="50" r="4.2" fill="#7c2d12"/>
+      <circle cx="50.6" cy="48.4" r="1.5" fill="#fff8e1"/>
+      <circle cx="72.6" cy="48.4" r="1.5" fill="#fff8e1"/>
+      <path d="M46 59 Q60 77 74 59 Q60 68 46 59 Z" fill="#7c2d12"/>
+      <path d="M54 69 Q60 75 66 69 Q60 72 54 69 Z" fill="#ff8a8a"/>
+      <circle cx="41" cy="58" r="4.8" fill="#fb7185" opacity=".5"/>
+      <circle cx="79" cy="58" r="4.8" fill="#fb7185" opacity=".5"/>`;
   }
   // 12方向の光線
   let rays = "";
@@ -529,6 +555,7 @@ function renderProfileSetup() {
     save = u;
     persist();
     cloudSaveUser(name);   // パスワード補完などの変更をクラウドへ
+    bumpLogin(name);       // アクセス解析：ログインを1カウント
     setActor(name);
     renderHome();
   });
@@ -613,12 +640,14 @@ function renderAdmin() {
       <h2>🛠 管理者画面</h2>
     </header>
     <div class="setup-card admin-menu">
+      <button class="next-btn big-btn" id="statsBtn">📈 アクセス解析</button>
       <button class="primary-btn big-btn" id="regBtn">user新規登録</button>
       <button class="next-btn big-btn" id="usersBtn">user一覧</button>
     </div>
     <h3 class="sec-title">📚 ぜんぶの単元（${TOPICS.length}）— タップで開く</h3>
     <div class="admin-topics">${topicsHtml}</div>`;
   document.getElementById("backBtn").addEventListener("click", renderProfileSetup);
+  document.getElementById("statsBtn").addEventListener("click", renderAnalytics);
   document.getElementById("regBtn").addEventListener("click", renderAdminRegister);
   document.getElementById("usersBtn").addEventListener("click", renderAdminUsers);
   // 単元をタップ → プレビュー用の一時セッションで開く（実ユーザーの記録は汚さない）
@@ -642,6 +671,44 @@ function renderAdmin() {
       const lbl = row.querySelector(".ati-tlabel");
       if (lbl) lbl.textContent = sw.checked ? "表示" : "非表示";
     }));
+}
+
+/* ---------- 管理者：アクセス解析 ---------- */
+async function renderAnalytics() {
+  app.innerHTML = `
+    <header class="sub-head"><button class="back" id="backBtn">← 管理者画面</button><h2>📈 アクセス解析</h2></header>
+    <div class="cloud-loading"><p>☀️ 集計を よみこみ中…</p></div>`;
+  document.getElementById("backBtn").addEventListener("click", renderAdmin);
+  let rows = [];
+  try { rows = await cloudLoadAnalytics(); } catch (e) { console.warn("analytics", e); }
+  const totalTop = rows.reduce((a, r) => a + (r.topViews || 0), 0);
+  const totalLogins = rows.reduce((a, r) => a + (r.logins || 0), 0);
+  const allUsers = new Set(); rows.forEach((r) => (r.users || []).forEach((u) => allUsers.add(u)));
+  const table = rows.length ? `
+    <div class="stats-card">
+      <table class="pw-table">
+        <thead><tr><th>日付</th><th>TOP<br>アクセス</th><th>ログイン<br>人数</th><th>ログイン<br>回数</th></tr></thead>
+        <tbody>${rows.map((r) => `<tr>
+          <td>${r.date}</td>
+          <td>${r.topViews || 0}</td>
+          <td>${(r.users || []).length}</td>
+          <td>${r.logins || 0}</td>
+        </tr>`).join("")}</tbody>
+      </table>
+    </div>`
+    : `<div class="empty">${cloudReady ? "まだ 記録が ないよ" : "オフラインのため 集計を よみこめません"}</div>`;
+  app.innerHTML = `
+    <header class="sub-head"><button class="back" id="backBtn">← 管理者画面</button><h2>📈 アクセス解析</h2></header>
+    <div class="stats-card">
+      <div class="profile-line" style="flex-wrap:wrap;gap:6px">
+        <span class="chip">TOP総アクセス <b>${totalTop}</b></span>
+        <span class="chip">のべログイン <b>${totalLogins}</b></span>
+        <span class="chip">ログインしたユーザー <b>${allUsers.size}</b>人</span>
+      </div>
+    </div>
+    <h3 class="sec-title">📅 毎日の記録（新しい順）</h3>
+    ${table}`;
+  document.getElementById("backBtn").addEventListener("click", renderAdmin);
 }
 
 /* ---------- 管理者：user新規登録 ---------- */
@@ -2216,6 +2283,7 @@ async function boot() {
     if (store.currentUser && store.users[store.currentUser]) save = store.users[store.currentUser];
   }
   if (save && save.profile && !save.guest) setActor(save.profile.name);   // ログイン継続中なら名前を表示
+  bumpTopView();   // アクセス解析：TOP画面アクセスを1カウント
   renderHome();   // save が無ければ内部で renderProfileSetup に飛ぶ
 }
 boot();

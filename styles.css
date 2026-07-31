@@ -65,11 +65,17 @@ body {
 }
 @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
 .home-head h1 {
-  font-size: 25px; font-weight: 900; margin: 8px 0 4px; letter-spacing: .06em;
-  background: linear-gradient(92deg, #fcd34d 0%, #fb7185 55%, #a78bfa 100%);
+  font-size: 27px; font-weight: 900; margin: 8px 0 4px; letter-spacing: .06em;
+  background: linear-gradient(92deg, #fde047 0%, #fb7185 52%, #a78bfa 100%);
   -webkit-background-clip: text; background-clip: text;
   -webkit-text-fill-color: transparent; color: transparent;
   display: inline-block;
+  /* こい紺色の縁取り（drop-shadowを四方に重ねて フチをつくる）＋やわらかい影で目立たせる */
+  filter:
+    drop-shadow(1.5px 0 0 #16123a) drop-shadow(-1.5px 0 0 #16123a)
+    drop-shadow(0 1.5px 0 #16123a) drop-shadow(0 -1.5px 0 #16123a)
+    drop-shadow(1px 1px 0 #16123a) drop-shadow(-1px -1px 0 #16123a)
+    drop-shadow(0 3px 5px rgba(0, 0, 0, .55));
 }
 /* タイトル内の「by あるこ塾」：小さめ・下寄り */
 .by-arco { font-size: .5em; font-weight: 700; vertical-align: bottom; margin-left: .5em; letter-spacing: .04em; }
