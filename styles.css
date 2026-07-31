@@ -977,3 +977,8 @@ body.has-user-bar { padding-top: 30px; }
 .uh-tag { color: var(--sub); font-size: 11.5px; }
 .uh-allok { margin-top: 6px; font-size: 12.5px; color: var(--good); font-weight: 700; }
 .uh-note { margin-top: 6px; font-size: 12.5px; color: var(--sub); }
+
+/* 10問テスト結果：あなたの答え／正しい答え の比較行 */
+.tr-answers { margin-top: 5px; font-size: 13px; line-height: 1.7; }
+.tr-answers .tr-your { color: var(--bad); }
+.tr-answers .tr-ans { color: var(--good); }

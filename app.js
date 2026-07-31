@@ -148,11 +148,14 @@ function totalStars() { return TOPICS.reduce((a, t) => a + starsOf(t.id), 0); }
 // 見られる学年の上限。
 // 4年生以上で登録しても 3年生までと同じ扱いでスタートし、
 // 表示中の全単元が★5なら 1学年ずつ上へ開いていく。
-const UNLOCK_STARS = 4;   // 学年が開く条件：その学年までの全単元が ★4 以上
+const UNLOCK_STARS = 4;   // ゲストの次単元が出る条件：★4 以上
+// ログイン中のユーザーは ★5（全問正解）で学年アップ。ゲスト等は ★4。
+function unlockStars() { return (save && !save.guest) ? 5 : UNLOCK_STARS; }
 function unlockedMax() {
   if (!save || !save.profile) return 6;
+  const need = unlockStars();
   let g = Math.min(save.profile.grade, 3);
-  while (g < 7 && TOPICS.filter((t) => gradeNum(t) <= g && !isHidden(t.id)).every((t) => starsOf(t.id) >= UNLOCK_STARS)) g++;
+  while (g < 7 && TOPICS.filter((t) => gradeNum(t) <= g && !isHidden(t.id)).every((t) => starsOf(t.id) >= need)) g++;
   return g;
 }
 
@@ -809,8 +812,8 @@ function renderHome() {
       lockBanner = `<div class="lock-banner">🎮 ゲストモード（${done}/${GUEST_TOPICS.length} クリア）：<b>${cur.name}</b> で ★${UNLOCK_STARS}いじょう（8問せいかい）を とると 次の単元が 現れるよ！ きろくは のこらないよ</div>`;
     }
   } else if (un < 7) {
-    const remaining = visible.filter((t) => starsOf(t.id) < UNLOCK_STARS).length;
-    lockBanner = `<div class="lock-banner">🔒 全部の単元で ★${UNLOCK_STARS}いじょう（8問せいかい）を とると、<b>${gradeLabel(un + 1)}</b> の問題が 開くよ！（のこり <b>${remaining}</b> 単元）</div>`;
+    const remaining = visible.filter((t) => starsOf(t.id) < unlockStars()).length;
+    lockBanner = `<div class="lock-banner">🔒 全部の単元で ★5（10問ぜんぶ正解）を とると、<b>${gradeLabel(un + 1)}</b> の問題が 開くよ！（のこり <b>${remaining}</b> 単元）</div>`;
   } else {
     lockBanner = `<div class="lock-banner open">🎉 すべての学年が 開いたよ！ 全部 ★5 をめざそう！</div>`;
   }
@@ -1606,16 +1609,26 @@ function renderTestResult(topic, problems, results, correct, unlockedTo, point =
 
   const list = results.map((r, i) => {
     const ok = r.res.correct;
-    const missBlock = (!ok && r.res.tag)
-      ? `<div class="tr-miss"><b>${r.res.title}</b><div class="tr-hint">🔑 ${r.res.hint}</div></div>`
-      : (!ok && r.blank ? `<div class="tr-blank">空らん（答えを 書いていないよ）</div>` : "");
+    let body;
+    if (ok) {
+      body = `<div class="tr-q">${problemTextOf(topic, r.p)} <b class="tr-ans">${formatAnswer(topic, r.p)}</b></div>`;
+    } else {
+      // 入力した誤答（空らんは ×）と 正しい答え、そして 見くらべたアドバイス
+      const your = r.blank ? "×（空らん）" : plainUserAns(r.ans);
+      const advice = r.res.hint
+        ? r.res.hint                                             // 診断できた誤りは その直し方
+        : (r.blank ? "時間内に 書けるように、わかる問題から 先に うめよう。"
+          : "正しい答えと 見くらべて、どこで まちがえたか たしかめよう。");
+      body = `
+        <div class="tr-q">${problemTextOf(topic, r.p)}</div>
+        <div class="tr-answers">あなたの答え：<b class="tr-your">${esc(your)}</b>　／　正しい答え：<b class="tr-ans">${formatAnswer(topic, r.p)}</b></div>
+        ${r.res.title ? `<div class="tr-miss"><b>💥 ${r.res.title}</b></div>` : ""}
+        <div class="tr-hint">💡 ${advice}</div>`;
+    }
     return `
       <div class="tr-item ${ok ? "ok" : "ng"}">
         <div class="tr-mark">${ok ? "⭕" : "❌"}<span class="tr-no">${i + 1}</span></div>
-        <div class="tr-body">
-          <div class="tr-q">${problemTextOf(topic, r.p)} <b class="tr-ans">${formatAnswer(topic, r.p)}</b></div>
-          ${missBlock}
-        </div>
+        <div class="tr-body">${body}</div>
       </div>`;
   }).join("");
 
