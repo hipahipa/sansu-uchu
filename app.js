@@ -301,8 +301,15 @@ function tone(freq, delay, dur, type = "sine", vol = 0.22) {
   o.start(t0);
   o.stop(t0 + dur + 0.05);
 }
-// ピンポン♪（正解）
-function playPinpon() { tone(1046.5, 0, 0.16); tone(1318.5, 0.16, 0.45); }
+// ピンポーン♪（正解）— やわらかく豪華な 和音チャイム（金属感をおさえる）
+function playPinpon() {
+  // ピン（やわらかい中音・三角波でまるい音に）
+  tone(783.99, 0,    0.20, "triangle", 0.20); // G5
+  // ポーン（長めの余韻＋和音でふくよかに）
+  tone(987.77, 0.17, 0.90, "triangle", 0.20); // B5（主音）
+  tone(659.25, 0.17, 0.95, "sine",     0.13); // E5（下でふくらみ）
+  tone(493.88, 0.17, 1.05, "sine",     0.10); // B4（さらに下で厚み）
+}
 // ブブー（不正解）
 function playBubu() { tone(120, 0, 0.16, "square", 0.15); tone(95, 0.2, 0.4, "square", 0.15); }
 
@@ -931,20 +938,37 @@ function renderStats() {
   const totalCorrect = Object.values(save.topics).reduce((a, s) => a + (s.correct || 0), 0);
 
   /* --- 成長：最近のセッション得点をバーで --- */
+  const pad2 = (v) => String(v).padStart(2, "0");
+  const fmtDate = (iso) => { const d = new Date(iso); return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}`; };
+  const topicEmojiOf = (h) => h.mode === "mistake" ? "🔁" : ((TOPICS.find((x) => x.id === h.t) || {}).emoji || "❓");
+  const topicNameOf = (h) => h.mode === "mistake" ? "間違えた問題" : ((TOPICS.find((x) => x.id === h.t) || {}).name || h.t);
   const hist = (save.history || []).slice(-10);
   let growth;
   if (!hist.length) {
     growth = `<div class="empty small">まだ きろくが ないよ。10問 さいごまで やってみよう！</div>`;
   } else {
-    growth = `<div class="chart">` + hist.map((h) => {
-      const t = TOPICS.find((x) => x.id === h.t);
-      return `
+    growth = `<div class="chart">` + hist.map((h) => `
         <div class="bar-wrap">
           <div class="bar${h.score === 10 ? " full" : ""}" style="height:${Math.max(h.score * 10, 6)}%"><span class="bar-score">${h.score}</span></div>
-          <div class="bar-label">${t ? t.emoji : "❓"}</div>
-        </div>`;
-    }).join("") + `</div>
-    <p class="chart-note">さいきん ${hist.length} 回の 10問チャレンジのけっか（右が 新しい）</p>`;
+          <div class="bar-label">${topicEmojiOf(h)}</div>
+        </div>`).join("") + `</div>
+    <p class="chart-note">さいきん ${hist.length} 回の チャレンジのけっか（右が 新しい）</p>`;
+  }
+
+  /* --- 日付つき きろく（新しい順） --- */
+  const recent = (save.history || []).slice(-15).reverse();
+  let recentHtml;
+  if (!recent.length) {
+    recentHtml = `<div class="empty small">まだ きろくが ないよ。</div>`;
+  } else {
+    const modeTag = (h) => h.mode === "test" ? "📝10問" : (h.mode === "mistake" ? "🔁見直し" : "⚡1問1答");
+    recentHtml = `<div class="hist-list">` + recent.map((h) => `
+      <div class="hist-row">
+        <span class="hist-date">${fmtDate(h.d)}</span>
+        <span class="hist-topic">${topicEmojiOf(h)} ${esc(topicNameOf(h))}</span>
+        <span class="hist-mode">${modeTag(h)}</span>
+        <span class="hist-score">${h.score}/${h.total || 10}${h.point != null ? `・${h.point}点` : ""}</span>
+      </div>`).join("") + `</div>`;
   }
 
   /* --- 苦手分野：1回目せいかい率が低い単元ワースト3 --- */
@@ -1005,6 +1029,9 @@ function renderStats() {
     <h3 class="sec-title">📈 せいちょう</h3>
     ${growth}
 
+    <h3 class="sec-title">🗓 学習の きろく（日付つき）</h3>
+    ${recentHtml}
+
     <h3 class="sec-title">💪 苦手かも しれない単元</h3>
     ${weakHtml}
 
@@ -1012,10 +1039,13 @@ function renderStats() {
     <p class="stats-lead">ここを 直すのが 点数アップの 近道！</p>
     ${missHtml}
 
+    <button class="mistake-btn" id="mistakeBtn">🔁 間違えた問題リスト<br><span class="mistake-sub">これまで まちがえた問題から ランダムで 10問テスト</span></button>
+
     <button class="reset-btn" id="resetAllBtn">${esc(p.name)}さんの きろくを リセット</button>`;
 
   document.getElementById("backBtn").addEventListener("click", renderHome);
   wireTopBtn();
+  document.getElementById("mistakeBtn").addEventListener("click", beginMistakeTest);
   document.getElementById("resetAllBtn").addEventListener("click", () => {
     if (confirm(`${p.name}さんの なまえ・★・きろくを 全部 消す？（ほかの人の きろくは のこるよ）`)) {
       cloudDeleteUser(p.name);   // クラウドからも削除
@@ -1627,6 +1657,7 @@ function gradeTest(topic, problems, timedOut = false) {
   const point = calcPoint(correct, session.timeLeft).point;   // 正解×25 ＋ のこり秒数×(正解/10)
   // 誤答した問題の詳細（学習履歴用）
   const wrongList = results.filter((r) => !r.res.correct).map((r) => ({
+    tid: topic.id, p: r.p,
     q: plainProblem(topic, r.p), correct: plainAnswer(topic, r.p),
     user: r.blank ? "（空）" : plainUserAns(r.ans), title: r.res.title || "",
   }));
@@ -1730,6 +1761,196 @@ function renderTestResult(topic, problems, results, correct, unlockedTo, point =
   document.getElementById("againBtn").addEventListener("click", () => beginTest(topic));
   wireTopBtn();
   if (correct >= 8) burst();
+}
+
+/* ==================== 間違えた問題テスト ====================
+   これまでの学習履歴（history[].wrong）に たまった 誤答から、問題を復元して
+   ランダムに 最大10問の テストを作る。単元がバラバラでも 各問題ごとに
+   その単元のルールで 出題・採点する。 */
+// 履歴の誤答から 復元できる問題（tid＋問題オブジェクト付き）を集めて 重複を除く。
+function collectMistakeProblems() {
+  const items = [];
+  const seen = new Set();
+  (save.history || []).forEach((h) => {
+    (h.wrong || []).forEach((w) => {
+      if (!w || !w.tid || !w.p) return;                 // 旧データ（問題オブジェクト無し）は 復元できないのでスキップ
+      const topic = TOPICS.find((t) => t.id === w.tid);
+      if (!topic) return;
+      const key = w.tid + "|" + (w.p.text != null ? w.p.text : JSON.stringify(w.p));
+      if (seen.has(key)) return;
+      seen.add(key);
+      items.push({ topic, p: w.p });
+    });
+  });
+  // シャッフル（Fisher–Yates）して 最大10問
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+  return items.slice(0, QUESTIONS_PER_SESSION);
+}
+
+function beginMistakeTest() {
+  const items = collectMistakeProblems();
+  if (!items.length) {
+    alert("まだ 「もう一度」できる 間違えた問題が ないよ。\n10問テストや ふつうの出題で まちがえると、ここに たまっていくよ！");
+    return;
+  }
+  stopTimer();
+  testGraded = false;
+  session = { streak: 0, count: 0, correct: 0, correctSigs: new Set(), misses: [], wrongList: [], timeLeft: TIME_LIMIT, timerId: null };
+  renderMistakeTest(items);
+  session.timerId = setInterval(() => {
+    session.timeLeft--;
+    updateTimerUI();
+    if (session.timeLeft <= 0) { stopTimer(); gradeMistakeTest(items, true); }
+  }, 1000);
+}
+
+function renderMistakeTest(items) {
+  const rows = items.map((it, i) => {
+    const atype = effAnswerType(it.topic, it.p);
+    const figure = it.topic.figure ? `<div class="figure">${it.topic.figure(it.p)}</div>` : "";
+    return `
+      <div class="test-item">
+        <div class="test-no">${i + 1}</div>
+        <div class="test-body">
+          <div class="mt-src">${it.topic.emoji} ${it.topic.name}</div>
+          ${figure}
+          <div class="calc-row${atype === "twofrac" ? " calc-tight" : ""}">
+            <div class="problem-text">${problemTextOf(it.topic, it.p)}</div>
+            ${answerInputHTMLIndexed(atype, it.p, i)}
+          </div>
+        </div>
+      </div>`;
+  }).join("");
+
+  app.innerHTML = `
+    <header class="sub-head">
+      <button class="back" id="backBtn">🔙</button>
+      <div class="play-score">
+        <span class="chip timer" id="timerChip">⏱ ${session.timeLeft}</span>
+        <button class="top-btn" id="topBtn">TOP画面へ</button>
+      </div>
+    </header>
+    <div class="play-topic">🔁 間違えた問題テスト <span class="test-badge">${items.length}問</span></div>
+    <p class="test-lead">前に まちがえた問題を あつめたよ。もう一度 チャレンジ！（${TIME_LIMIT}秒・空らんは 不正解）</p>
+    <div class="test-list">${rows}</div>
+    <div class="test-foot">
+      <div class="test-actions-row">
+        <button class="primary-btn" id="gradeBtn">答え合わせ<br>（${items.length}問）</button>
+      </div>
+      <div class="test-note">空らんは 不正解に なるよ</div>
+    </div>`;
+
+  document.getElementById("backBtn").addEventListener("click", renderStats);
+  document.getElementById("gradeBtn").addEventListener("click", () => gradeMistakeTest(items));
+  fitButtonText(document.getElementById("gradeBtn"));
+  wireTopBtn();
+
+  const flds = [...document.querySelectorAll(".test-list .fld")];
+  flds.forEach((f, idx) => {
+    f.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); (flds[idx + 1] || document.getElementById("gradeBtn")).focus(); }
+    });
+  });
+  autoSizeNumberFields();
+  wireMixIntButtons();
+  flds[0]?.focus();
+}
+
+function gradeMistakeTest(items, timedOut = false) {
+  if (testGraded) return;
+  testGraded = true;
+  stopTimer();
+  const results = items.map((it, i) => {
+    const atype = effAnswerType(it.topic, it.p);
+    let ans = readAnswerIndexed(atype, i);
+    const blank = ans === null;
+    if (!blank && it.topic.answerType === "frac" && atype === "int") ans = { n: ans, d: 1 };
+    const res = blank ? { correct: false } : it.topic.diagnose(ans, it.p);
+    return { topic: it.topic, p: it.p, res, blank, ans };
+  });
+  const correct = results.filter((r) => r.res.correct).length;
+  const point = calcPoint(correct, session.timeLeft).point;
+
+  // 単元ごとの成績に反映＋つまずき記録＋まだ間違える問題は プールに残す（正解した問題は新しい誤答に入らない）
+  results.forEach((r) => {
+    const sv = topicSave(r.topic.id);
+    sv.played += 1;
+    if (r.res.correct) sv.correct += 1;
+    else if (r.res.tag) logMiss(r.topic, r.res);
+  });
+  const wrongList = results.filter((r) => !r.res.correct).map((r) => ({
+    tid: r.topic.id, p: r.p,
+    q: plainProblem(r.topic, r.p), correct: plainAnswer(r.topic, r.p),
+    user: r.blank ? "（空）" : plainUserAns(r.ans), title: r.res.title || "",
+  }));
+  save.history.push({ t: "mistake", d: new Date().toISOString(), score: correct, total: items.length, point, miss: items.length - correct, wrong: wrongList.slice(0, 20), mode: "mistake" });
+  if (save.history.length > 200) save.history = save.history.slice(-200);
+  persist();
+  if (!save.guest) cloudSaveUser(save.profile.name);
+
+  renderMistakeTestResult(items, results, correct, point, timedOut);
+}
+
+function renderMistakeTestResult(items, results, correct, point, timedOut) {
+  const total = items.length;
+  let face, msg;
+  if (timedOut) { face = "⏰"; msg = "タイムアップ！ そこまでの ぶんで 採点したよ"; }
+  else if (correct === total) { face = "🏆"; msg = "かんぺき！ にがてを こくふく したね！"; }
+  else if (correct >= Math.ceil(total * 0.8)) { face = "🌟"; msg = "おしい！ あと少し！"; }
+  else if (correct >= Math.ceil(total * 0.6)) { face = "😊"; msg = "いいね！ くりかえそう！"; }
+  else { face = "💪"; msg = "くりかえせば きっと できる！"; }
+
+  const list = results.map((r, i) => {
+    const ok = r.res.correct;
+    let body;
+    if (ok) {
+      body = `<div class="tr-q">${problemTextOf(r.topic, r.p)} <b class="tr-ans">${formatAnswer(r.topic, r.p)}</b></div>`;
+    } else {
+      const your = r.blank ? "×（空らん）" : plainUserAns(r.ans);
+      const advice = r.res.hint
+        ? r.res.hint
+        : (r.blank ? "時間内に 書けるように、わかる問題から 先に うめよう。"
+          : "正しい答えと 見くらべて、どこで まちがえたか たしかめよう。");
+      body = `
+        <div class="tr-q">${problemTextOf(r.topic, r.p)}</div>
+        <div class="tr-answers">あなたの答え：<b class="tr-your">${esc(your)}</b>　／　正しい答え：<b class="tr-ans">${formatAnswer(r.topic, r.p)}</b></div>
+        ${r.res.title ? `<div class="tr-miss"><b>💥 ${r.res.title}</b></div>` : ""}
+        <div class="tr-hint">💡 ${advice}</div>`;
+    }
+    return `
+      <div class="tr-item ${ok ? "ok" : "ng"}">
+        <div class="tr-mark">${ok ? "⭕" : "❌"}<span class="tr-no">${i + 1}</span></div>
+        <div class="tr-body"><div class="mt-src">${r.topic.emoji} ${r.topic.name}</div>${body}</div>
+      </div>`;
+  }).join("");
+
+  app.innerHTML = `
+    <header class="sub-head">
+      <button class="back" id="backBtn">← 学習きろく</button>
+      <h2>🔁 間違えた問題テストのけっか</h2>
+      <div class="play-score"><button class="top-btn" id="topBtn">TOP画面へ</button></div>
+    </header>
+    <div class="complete">
+      <div class="complete-face">${face}</div>
+      <div class="complete-topic">🔁 間違えた問題テスト</div>
+      <div class="complete-score"><b>${correct}</b><span> / ${total} 正解</span><span class="point-badge">${point}点</span></div>
+      <div class="complete-msg">${msg}</div>
+    </div>
+    <h3 class="sec-title">📋 答え合わせ</h3>
+    <div class="tr-list">${list}</div>
+    <div class="complete-actions">
+      <button class="primary-btn" id="againBtn">🔁 もう一度（別の10問）</button>
+      <button class="next-btn" id="statsBackBtn">学習きろくへ</button>
+    </div>`;
+
+  document.getElementById("backBtn").addEventListener("click", renderStats);
+  document.getElementById("statsBackBtn").addEventListener("click", renderStats);
+  document.getElementById("againBtn").addEventListener("click", beginMistakeTest);
+  wireTopBtn();
+  if (correct >= Math.ceil(total * 0.8)) burst();
 }
 
 function renderPlay() {
@@ -2075,8 +2296,8 @@ function onCheck() {
     shakeBox();
     cur.attempt = 1;
     session.streak = 0;
-    // 1回目で誤答した問題を 学習履歴用に記録
-    session.wrongList.push({ q: plainProblem(topic, problem), correct: plainAnswer(topic, problem), user: plainUserAns(ans), title: res.title || "" });
+    // 1回目で誤答した問題を 学習履歴用に記録（tid・問題オブジェクトも保存 → あとで「間違えた問題テスト」に使う）
+    session.wrongList.push({ tid: topic.id, p: problem, q: plainProblem(topic, problem), correct: plainAnswer(topic, problem), user: plainUserAns(ans), title: res.title || "" });
     if (res.tag) {
       logMiss(topic, res);
       session.misses.push({ tag: res.tag, title: res.title, hint: res.hint, topicName: topic.name });
